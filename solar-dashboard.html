@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solar Site Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0a0e0f;
+    --surface: #111518;
+    --surface2: #181d20;
+    --border: #1e2529;
+    --accent: #f0c040;
+    --accent2: #e07b20;
+    --text: #e8eaeb;
+    --text-dim: #6b7478;
+    --text-mid: #9aa0a4;
+    --green: #3ddc84;
+    --red: #ff5252;
+    --radius: 2px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    animation: pulse-icon 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-icon {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1) rotate(45deg); }
+  }
+
+  .logo span { color: var(--accent); }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+    box-shadow: 0 0 6px var(--green);
+    animation: blink 2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* LAYOUT */
+  .app {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    grid-template-rows: 1fr;
+    height: calc(100vh - 57px);
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 3px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .section {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+  }
+
+  /* API KEY */
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .input-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  input[type="text"], input[type="password"], input[type="number"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    border-radius: var(--radius);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input:focus { border-color: var(--accent); }
+
+  /* UPLOAD */
+  .upload-zone {
+    border: 1px dashed var(--border);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-radius: var(--radius);
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(240,192,64,0.04);
+  }
+
+  .upload-zone input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+    color: var(--text-dim);
+  }
+
+  .upload-text { color: var(--text-mid); font-size: 11px; line-height: 1.6; }
+  .upload-text strong { color: var(--accent); display: block; font-size: 12px; margin-bottom: 4px; }
+
+  .csv-format {
+    margin-top: 12px;
+    padding: 10px;
+    background: var(--surface2);
+    border-radius: var(--radius);
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+
+  .csv-format code { color: var(--accent2); }
+
+  /* DEMO BUTTON */
+  .btn {
+    width: 100%;
+    padding: 10px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: all 0.15s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0a0e0f;
+  }
+
+  .btn-primary:hover { background: #f5d060; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-mid);
+    border: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  .btn-ghost:hover { border-color: var(--text-mid); color: var(--text); }
+
+  /* STATS */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat-card {
+    background: var(--surface2);
+    padding: 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-label { font-size: 9px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
+
+  /* MAIN */
+  .main {
+    display: grid;
+    grid-template-rows: 1fr 260px;
+    overflow: hidden;
+  }
+
+  /* MAP */
+  .map-container {
+    position: relative;
+    overflow: hidden;
+  }
+
+  #map {
+    width: 100%;
+    height: 100%;
+    background: #0d1215;
+  }
+
+  .map-overlay {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 500;
+    display: flex;
+    gap: 8px;
+    flex-direction: column;
+  }
+
+  .map-badge {
+    background: rgba(10,14,15,0.85);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    font-size: 10px;
+    color: var(--text-mid);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius);
+    letter-spacing: 0.5px;
+  }
+
+  .map-badge strong { color: var(--accent); }
+
+  /* EMPTY MAP STATE */
+  .map-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    z-index: 400;
+    gap: 12px;
+    color: var(--text-dim);
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .map-empty.hidden { opacity: 0; pointer-events: none; }
+
+  .empty-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.3;
+  }
+
+  .empty-cross {
+    width: 60px;
+    height: 60px;
+    border: 1px solid var(--border);
+    transform: rotate(45deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: rotate-slow 8s linear infinite;
+  }
+
+  @keyframes rotate-slow { to { transform: rotate(405deg); } }
+
+  .empty-cross::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    transform: rotate(-45deg);
+  }
+
+  /* AI PANEL */
+  .ai-panel {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .ai-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .ai-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ai-title::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  }
+
+  .ai-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    line-height: 1.7;
+    color: var(--text-mid);
+    font-size: 12px;
+  }
+
+  .ai-body::-webkit-scrollbar { width: 3px; }
+  .ai-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .ai-placeholder {
+    color: var(--text-dim);
+    font-style: italic;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ai-placeholder span { display: flex; align-items: center; gap: 8px; }
+  .ai-placeholder span::before { content: '//'; color: var(--border); }
+
+  .ai-response { white-space: pre-wrap; color: var(--text); }
+
+  .ai-response h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    color: var(--accent);
+    margin: 12px 0 6px;
+  }
+
+  .ai-response h3:first-child { margin-top: 0; }
+
+  .loading-dots {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .loading-dots::after {
+    content: '...';
+    animation: dots 1.2s steps(4, end) infinite;
+    letter-spacing: 2px;
+    color: var(--accent);
+  }
+
+  @keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+  }
+
+  /* ANALYZE BTN in AI header */
+  .btn-analyze {
+    padding: 6px 16px;
+    font-size: 11px;
+    width: auto;
+  }
+
+  /* DATA TABLE in sidebar */
+  .data-table {
+    font-size: 10px;
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .data-table th {
+    color: var(--text-dim);
+    text-align: left;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+    letter-spacing: 0.5px;
+  }
+
+  .data-table td {
+    padding: 5px 6px;
+    color: var(--text-mid);
+    border-bottom: 1px solid rgba(30,37,41,0.5);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .data-table tr:hover td { color: var(--text); background: rgba(240,192,64,0.03); }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 9px;
+    border-radius: 1px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .tag-good { background: rgba(61,220,132,0.15); color: var(--green); }
+  .tag-mid { background: rgba(240,192,64,0.15); color: var(--accent); }
+  .tag-bad { background: rgba(255,82,82,0.15); color: var(--red); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 12px 18px;
+    font-size: 12px;
+    border-radius: var(--radius);
+    z-index: 9999;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width: 300px;
+  }
+
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+
+  /* Scrollbar global */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon"></div>
+    Solar<span>Site</span> Intelligence
+  </div>
+  <div class="header-meta">
+    <span><span class="status-dot"></span>SYSTEM READY</span>
+    <span id="point-count">0 POINTS LOADED</span>
+  </div>
+</header>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- API KEY -->
+    <div class="section">
+      <div class="section-label">Configuration</div>
+      <div class="input-group">
+        <div class="input-label">ANTHROPIC API KEY</div>
+        <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off">
+      </div>
+    </div>
+
+    <!-- UPLOAD -->
+    <div class="section">
+      <div class="section-label">Data Input</div>
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="csv-input" accept=".csv">
+        <div class="upload-icon">◈</div>
+        <div class="upload-text">
+          <strong>Upload CSV File</strong>
+          Drop geodetic measurement data
+        </div>
+      </div>
+      <div class="csv-format">
+        Expected columns:<br>
+        <code>lat, lon, elevation, slope, azimuth</code><br>
+        <code>lat, lon, elevation</code> (min)
+      </div>
+      <button class="btn btn-ghost" id="demo-btn" style="margin-top:12px">⬡ Load Demo Data (Portugal)</button>
+    </div>
+
+    <!-- STATS -->
+    <div class="section" id="stats-section" style="display:none">
+      <div class="section-label">Site Statistics</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-points">—</div>
+          <div class="stat-label">Measure Points</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-avg-slope">—</div>
+          <div class="stat-label">Avg Slope °</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-avg-az">—</div>
+          <div class="stat-label">Avg Azimuth °</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-area">—</div>
+          <div class="stat-label">Area est. m²</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA TABLE -->
+    <div class="section" id="table-section" style="display:none">
+      <div class="section-label">Measurement Points</div>
+      <div style="overflow-x:auto">
+        <table class="data-table" id="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>LAT</th>
+              <th>LON</th>
+              <th>ELEV</th>
+              <th>SLOPE</th>
+              <th>AZ</th>
+              <th>RATING</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- MAP -->
+    <div class="map-container">
+      <div class="map-empty" id="map-empty">
+        <div class="empty-grid"></div>
+        <div class="empty-cross"></div>
+        <div style="font-size:11px; letter-spacing:1px; text-align:center; z-index:1">
+          AWAITING GEODETIC DATA<br>
+          <span style="font-size:9px; color: var(--border); letter-spacing:2px">UPLOAD CSV TO BEGIN ANALYSIS</span>
+        </div>
+      </div>
+      <div id="map"></div>
+      <div class="map-overlay" id="map-overlay" style="display:none">
+        <div class="map-badge">SITE: <strong id="badge-site">Portugal PV Site</strong></div>
+        <div class="map-badge">OPTIMAL TILT: <strong id="badge-tilt">—°</strong></div>
+        <div class="map-badge">EST. YIELD: <strong id="badge-yield">— kWh/kWp/yr</strong></div>
+      </div>
+    </div>
+
+    <!-- AI PANEL -->
+    <div class="ai-panel">
+      <div class="ai-header">
+        <div class="ai-title">AI Site Analysis</div>
+        <button class="btn btn-primary btn-analyze" id="analyze-btn" disabled>Analyze Site →</button>
+      </div>
+      <div class="ai-body" id="ai-body">
+        <div class="ai-placeholder">
+          <span>Waiting for geodetic data upload</span>
+          <span>AI will analyze slope, azimuth, location</span>
+          <span>Recommendations for PV panel layout</span>
+          <span>Estimated annual energy yield</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DEMO_DATA = [
+  { lat: 38.7223, lon: -9.1393, elevation: 145, slope: 12, azimuth: 175 },
+  { lat: 38.7225, lon: -9.1390, elevation: 147, slope: 11, azimuth: 178 },
+  { lat: 38.7227, lon: -9.1387, elevation: 149, slope: 13, azimuth: 172 },
+  { lat: 38.7220, lon: -9.1396, elevation: 143, slope: 10, azimuth: 180 },
+  { lat: 38.7229, lon: -9.1384, elevation: 151, slope: 15, azimuth: 168 },
+  { lat: 38.7218, lon: -9.1399, elevation: 141, slope: 9,  azimuth: 182 },
+  { lat: 38.7231, lon: -9.1381, elevation: 153, slope: 16, azimuth: 165 },
+  { lat: 38.7216, lon: -9.1402, elevation: 139, slope: 8,  azimuth: 185 },
+  { lat: 38.7233, lon: -9.1378, elevation: 155, slope: 18, azimuth: 162 },
+  { lat: 38.7214, lon: -9.1405, elevation: 137, slope: 7,  azimuth: 188 },
+];
+
+let map = null;
+let markers = [];
+let currentData = [];
+
+function initMap() {
+  map = L.map('map', {
+    zoomControl: true,
+    attributionControl: false
+  }).setView([38.7223, -9.1393], 2);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20
+  }).addTo(map);
+}
+
+initMap();
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function solarRating(slope, azimuth) {
+  const az = azimuth ?? 180;
+  const sl = slope ?? 0;
+  const azScore = 1 - Math.abs(az - 175) / 90;
+  const slScore = sl >= 10 && sl <= 35 ? 1 : sl < 10 ? sl / 10 : Math.max(0, 1 - (sl - 35) / 30);
+  const score = (azScore * 0.6 + slScore * 0.4);
+  if (score > 0.7) return 'good';
+  if (score > 0.4) return 'mid';
+  return 'bad';
+}
+
+function estimateYield(lat, avgSlope, avgAzimuth) {
+  const latRad = lat * Math.PI / 180;
+  const optTilt = lat * 0.9;
+  const tiltDiff = Math.abs((avgSlope ?? optTilt) - optTilt);
+  const azDiff = Math.abs((avgAzimuth ?? 175) - 175);
+  const base = 1600 - Math.abs(lat - 38) * 15;
+  const tiltPenalty = tiltDiff * 3;
+  const azPenalty = azDiff * 2;
+  return Math.round(base - tiltPenalty - azPenalty);
+}
+
+function renderData(data) {
+  currentData = data;
+
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+
+  document.getElementById('map-empty').classList.add('hidden');
+  document.getElementById('map-overlay').style.display = 'flex';
+  document.getElementById('stats-section').style.display = 'block';
+  document.getElementById('table-section').style.display = 'block';
+  document.getElementById('analyze-btn').disabled = false;
+
+  const bounds = [];
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+
+  let totalSlope = 0, totalAz = 0, validSlope = 0, validAz = 0;
+
+  data.forEach((pt, i) => {
+    const rating = solarRating(pt.slope, pt.azimuth);
+    const color = rating === 'good' ? '#3ddc84' : rating === 'mid' ? '#f0c040' : '#ff5252';
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:12px;height:12px;background:${color};transform:rotate(45deg);border:1px solid rgba(0,0,0,0.5);box-shadow:0 0 8px ${color}44"></div>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6]
+    });
+
+    const marker = L.marker([pt.lat, pt.lon], { icon })
+      .addTo(map)
+      .bindPopup(`
+        <div style="font-family:monospace;font-size:11px;line-height:1.8;color:#e8eaeb;background:#111518;padding:4px">
+          <b style="color:#f0c040">Point #${i + 1}</b><br>
+          LAT: ${pt.lat.toFixed(5)}<br>
+          LON: ${pt.lon.toFixed(5)}<br>
+          ELEVATION: ${pt.elevation ?? '—'} m<br>
+          SLOPE: ${pt.slope ?? '—'}°<br>
+          AZIMUTH: ${pt.azimuth ?? '—'}°<br>
+          RATING: <span style="color:${color}">${rating.toUpperCase()}</span>
+        </div>
+      `);
+
+    markers.push(marker);
+    bounds.push([pt.lat, pt.lon]);
+
+    if (pt.slope != null) { totalSlope += pt.slope; validSlope++; }
+    if (pt.azimuth != null) { totalAz += pt.azimuth; validAz++; }
+
+    const tagClass = 'tag tag-' + rating;
+    tbody.innerHTML += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${pt.lat.toFixed(4)}</td>
+        <td>${pt.lon.toFixed(4)}</td>
+        <td>${pt.elevation ?? '—'}</td>
+        <td>${pt.slope ?? '—'}</td>
+        <td>${pt.azimuth ?? '—'}</td>
+        <td><span class="${tagClass}">${rating}</span></td>
+      </tr>
+    `;
+  });
+
+  if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40] });
+  else if (bounds.length === 1) map.setView(bounds[0], 17);
+
+  const avgSlope = validSlope ? (totalSlope / validSlope).toFixed(1) : '—';
+  const avgAz = validAz ? (totalAz / validAz).toFixed(0) : '—';
+  const centerLat = data.reduce((s, p) => s + p.lat, 0) / data.length;
+  const yieldEst = estimateYield(centerLat, parseFloat(avgSlope), parseFloat(avgAz));
+  const optTilt = (centerLat * 0.9).toFixed(0);
+
+  document.getElementById('stat-points').textContent = data.length;
+  document.getElementById('stat-avg-slope').textContent = avgSlope;
+  document.getElementById('stat-avg-az').textContent = avgAz;
+
+  // rough area estimate from bounding box
+  const lats = data.map(p => p.lat);
+  const lons = data.map(p => p.lon);
+  const dLat = (Math.max(...lats) - Math.min(...lats)) * 111000;
+  const dLon = (Math.max(...lons) - Math.min(...lons)) * 111000 * Math.cos(centerLat * Math.PI / 180);
+  const area = Math.round(dLat * dLon);
+  document.getElementById('stat-area').textContent = area > 0 ? area.toLocaleString() : '—';
+
+  document.getElementById('badge-tilt').textContent = optTilt + '°';
+  document.getElementById('badge-yield').textContent = yieldEst.toLocaleString() + ' kWh/kWp/yr';
+  document.getElementById('point-count').textContent = data.length + ' POINTS LOADED';
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) throw new Error('CSV must have header + data rows');
+
+  const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+  const colIdx = {
+    lat: header.findIndex(h => h.includes('lat')),
+    lon: header.findIndex(h => h.includes('lon') || h.includes('lng')),
+    elevation: header.findIndex(h => h.includes('elev') || h.includes('alt') || h.includes('height')),
+    slope: header.findIndex(h => h.includes('slope') || h.includes('tilt') || h.includes('inclin')),
+    azimuth: header.findIndex(h => h.includes('az') || h.includes('orient') || h.includes('bearing'))
+  };
+
+  if (colIdx.lat === -1 || colIdx.lon === -1) throw new Error('CSV must have lat and lon columns');
+
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const cols = line.split(',').map(c => c.trim());
+    const parse = (i) => i !== -1 && cols[i] !== '' ? parseFloat(cols[i]) : null;
+    return {
+      lat: parseFloat(cols[colIdx.lat]),
+      lon: parseFloat(cols[colIdx.lon]),
+      elevation: parse(colIdx.elevation),
+      slope: parse(colIdx.slope),
+      azimuth: parse(colIdx.azimuth)
+    };
+  }).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+}
+
+document.getElementById('csv-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = parseCSV(ev.target.result);
+      if (data.length === 0) throw new Error('No valid data rows found');
+      renderData(data);
+      showToast(`Loaded ${data.length} measurement points`, 'success');
+    } catch(err) {
+      showToast('CSV Error: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+});
+
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = parseCSV(ev.target.result);
+      renderData(data);
+      showToast(`Loaded ${data.length} points`, 'success');
+    } catch(err) {
+      showToast('CSV Error: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('demo-btn').addEventListener('click', () => {
+  renderData(DEMO_DATA);
+  showToast('Demo data loaded — Lisbon region, Portugal', 'success');
+});
+
+document.getElementById('analyze-btn').addEventListener('click', async () => {
+  const apiKey = document.getElementById('api-key').value.trim();
+  if (!apiKey) { showToast('Enter your Anthropic API key first', 'error'); return; }
+  if (currentData.length === 0) { showToast('No data to analyze', 'error'); return; }
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing...';
+
+  const aiBody = document.getElementById('ai-body');
+  aiBody.innerHTML = '<div class="loading-dots">Running AI analysis</div>';
+
+  const lats = currentData.map(p => p.lat);
+  const lons = currentData.map(p => p.lon);
+  const centerLat = (Math.max(...lats) + Math.min(...lats)) / 2;
+  const centerLon = (Math.max(...lons) + Math.min(...lons)) / 2;
+
+  const slopes = currentData.filter(p => p.slope != null).map(p => p.slope);
+  const azimuths = currentData.filter(p => p.azimuth != null).map(p => p.azimuth);
+  const elevations = currentData.filter(p => p.elevation != null).map(p => p.elevation);
+
+  const avg = arr => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 'N/A';
+
+  const prompt = `You are a solar energy site assessment expert with geodetic expertise.
+
+Analyze this photovoltaic installation site based on geodetic measurements:
+
+LOCATION: ${centerLat.toFixed(4)}°N, ${centerLon.toFixed(4)}°E
+MEASUREMENT POINTS: ${currentData.length}
+AVERAGE SLOPE: ${avg(slopes)}°
+SLOPE RANGE: ${slopes.length ? Math.min(...slopes).toFixed(1) + '° – ' + Math.max(...slopes).toFixed(1) + '°' : 'N/A'}
+AVERAGE AZIMUTH: ${avg(azimuths)}°
+ELEVATION RANGE: ${elevations.length ? Math.min(...elevations).toFixed(0) + ' – ' + Math.max(...elevations).toFixed(0) + ' m' : 'N/A'}
+
+Provide a structured analysis with these sections:
+
+### Site Assessment
+Brief evaluation of the site's solar potential based on location and terrain.
+
+### Optimal Panel Configuration
+Recommended tilt angle, row spacing, and azimuth orientation. Include specific degrees.
+
+### Estimated Energy Yield
+Annual yield estimate in kWh/kWp/year for this location. Compare to regional average.
+
+### Risk Factors
+Any terrain or geometric issues that could affect installation or output.
+
+### Recommendations
+Top 3 specific actions to maximize this site's PV performance.
+
+Be technical and precise. Use numbers. Keep each section concise (2-4 sentences max).`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || 'API error ' + response.status);
+    }
+
+    const data = await response.json();
+    const text = data.content[0]?.text || 'No response received.';
+
+    const formatted = text
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--accent)">$1</strong>')
+      .replace(/\n{2,}/g, '\n\n');
+
+    aiBody.innerHTML = `<div class="ai-response">${formatted}</div>`;
+    showToast('Analysis complete', 'success');
+  } catch(err) {
+    aiBody.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${err.message}</div>`;
+    showToast('Analysis failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Analyze Site →';
+  }
+});
+</script>
+</body>
+</html>
