@@ -51,6 +51,14 @@
       <div class="input-group">
         <div class="input-label">ANTHROPIC API KEY</div>
         <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off">
+        <label class="remember-key">
+          <input type="checkbox" id="remember-key">
+          Remember on this device (stored only in this browser)
+        </label>
+        <div class="key-note">
+          Sent directly from your browser to api.anthropic.com — never touches a backend.
+          Only use a key on devices you trust.
+        </div>
       </div>
     </div>
 
@@ -90,8 +98,12 @@
           <div class="stat-label">Avg Azimuth °</div>
         </div>
         <div class="stat-card">
+          <div class="stat-value" id="stat-avg-elev">—</div>
+          <div class="stat-label">Avg Elevation m</div>
+        </div>
+        <div class="stat-card">
           <div class="stat-value" id="stat-area">—</div>
-          <div class="stat-label">Area est. m²</div>
+          <div class="stat-label">Site Area est. m²</div>
         </div>
       </div>
       <button class="btn btn-ghost" id="export-csv-btn" style="display:none;margin-top:14px">
@@ -139,6 +151,7 @@
       <div class="map-overlay" id="map-overlay" style="display:none">
         <div class="map-badge">SITE: <strong id="badge-site">Portugal PV Site</strong></div>
         <div class="map-badge">OPTIMAL TILT: <strong id="badge-tilt">—°</strong></div>
+        <div class="map-badge">PANEL FACING: <strong id="badge-facing">—</strong></div>
         <div class="map-badge">EST. YIELD: <strong id="badge-yield">— kWh/kWp/yr</strong></div>
       </div>
     </div>

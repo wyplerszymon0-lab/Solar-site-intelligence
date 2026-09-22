@@ -154,6 +154,35 @@ input[type="number"] {
 
 input:focus { border-color: var(--accent); }
 
+.remember-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-mid);
+  cursor: pointer;
+}
+
+.remember-key input { width: auto; cursor: pointer; }
+
+.key-note {
+  margin-top: 6px;
+  font-size: 9px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+/* LEAFLET ATTRIBUTION — restyled to fit dark theme */
+.leaflet-control-attribution {
+  background: rgba(10,14,15,0.75) !important;
+  color: var(--text-dim) !important;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px !important;
+}
+
+.leaflet-control-attribution a { color: var(--text-mid) !important; }
+
 /* UPLOAD */
 .upload-zone {
   border: 1px dashed var(--border);

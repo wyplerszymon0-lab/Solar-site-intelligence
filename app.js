@@ -20,14 +20,18 @@ const DEMO_DATA = [
 
 let map = null;
 let markers = [];
+let boundaryLayer = null;
 let currentData = [];
 let lastAiText = '';
 
 // ─── Map ──────────────────────────────────────────────────
 
 function initMap() {
-  map = L.map('map', { zoomControl: true, attributionControl: false }).setView([38.7223, -9.1393], 2);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20 }).addTo(map);
+  map = L.map('map', { zoomControl: true, attributionControl: true }).setView([38.7223, -9.1393], 2);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  }).addTo(map);
 }
 
 initMap();
@@ -42,12 +46,51 @@ function showToast(msg, type = '') {
   setTimeout(() => t.classList.remove('show'), 3500);
 }
 
+// ─── API key persistence (opt-in, this browser only) ──────
+// Off by default. The key never leaves the browser except in the direct
+// request to api.anthropic.com — storing it is purely a local convenience.
+
+const API_KEY_STORAGE = 'solarSite.apiKey';
+
+(function initApiKeyPersistence() {
+  const keyInput   = document.getElementById('api-key');
+  const rememberCb = document.getElementById('remember-key');
+
+  try {
+    const saved = localStorage.getItem(API_KEY_STORAGE);
+    if (saved) { keyInput.value = saved; rememberCb.checked = true; }
+  } catch { /* localStorage unavailable (private mode, etc.) — ignore */ }
+
+  rememberCb.addEventListener('change', () => {
+    try {
+      if (rememberCb.checked) localStorage.setItem(API_KEY_STORAGE, keyInput.value);
+      else localStorage.removeItem(API_KEY_STORAGE);
+    } catch { /* ignore */ }
+  });
+
+  keyInput.addEventListener('input', () => {
+    if (!rememberCb.checked) return;
+    try { localStorage.setItem(API_KEY_STORAGE, keyInput.value); } catch { /* ignore */ }
+  });
+})();
+
 // ─── Domain logic ─────────────────────────────────────────
 
-function solarRating(slope, azimuth) {
-  const az = azimuth ?? 180;
+// Northern hemisphere ⇒ panels face true south (180°); southern hemisphere ⇒ true north (0°/360°).
+function optimalAzimuth(lat) {
+  return lat >= 0 ? 180 : 0;
+}
+
+// Circular distance between two compass bearings (handles wrap-around at 0°/360°).
+function azimuthDiff(az, target) {
+  const d = Math.abs(az - target);
+  return Math.min(d, 360 - d);
+}
+
+function solarRating(lat, slope, azimuth) {
+  const az = azimuth ?? optimalAzimuth(lat);
   const sl = slope ?? 0;
-  const azScore = 1 - Math.abs(az - 175) / 90;
+  const azScore = 1 - azimuthDiff(az, optimalAzimuth(lat)) / 90;
   const slScore = sl >= 10 && sl <= 35 ? 1 : sl < 10 ? sl / 10 : Math.max(0, 1 - (sl - 35) / 30);
   const score = azScore * 0.6 + slScore * 0.4;
   if (score > 0.7) return 'good';
@@ -56,10 +99,51 @@ function solarRating(slope, azimuth) {
 }
 
 function estimateYield(lat, avgSlope, avgAzimuth) {
-  const optTilt = lat * 0.9;
+  const optTilt = Math.abs(lat) * 0.9;
   const tiltDiff = Math.abs((avgSlope ?? optTilt) - optTilt);
-  const azDiff = Math.abs((avgAzimuth ?? 175) - 175);
-  return Math.round(1600 - Math.abs(lat - 38) * 15 - tiltDiff * 3 - azDiff * 2);
+  const azDiff = azimuthDiff(avgAzimuth ?? optimalAzimuth(lat), optimalAzimuth(lat));
+  return Math.round(1600 - Math.abs(Math.abs(lat) - 38) * 15 - tiltDiff * 3 - azDiff * 2);
+}
+
+// ─── Site boundary (convex hull) ─────────────────────────
+// Andrew's monotone chain — points are (lon, lat), planar approximation
+// which is accurate enough for site-scale surveys (a few hundred meters).
+
+function convexHull(points) {
+  const pts = points.map(p => [p.lon, p.lat]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
+// Shoelace formula on a local equirectangular projection (meters), centered on the site.
+function polygonAreaM2(hullLonLat, centerLat) {
+  if (hullLonLat.length < 3) return 0;
+  const mPerDegLat = 111000;
+  const mPerDegLon = 111000 * Math.cos(centerLat * Math.PI / 180);
+  const xy = hullLonLat.map(([lon, lat]) => [lon * mPerDegLon, lat * mPerDegLat]);
+  let sum = 0;
+  for (let i = 0; i < xy.length; i++) {
+    const [x1, y1] = xy[i];
+    const [x2, y2] = xy[(i + 1) % xy.length];
+    sum += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(sum) / 2;
 }
 
 // ─── CSV Parser ───────────────────────────────────────────
@@ -157,6 +241,7 @@ function renderData(data) {
 
   markers.forEach(m => map.removeLayer(m));
   markers = [];
+  if (boundaryLayer) { map.removeLayer(boundaryLayer); boundaryLayer = null; }
 
   document.getElementById('map-empty').classList.add('hidden');
   document.getElementById('map-overlay').style.display = 'flex';
@@ -172,10 +257,10 @@ function renderData(data) {
   tbody.innerHTML = '';
 
   const bounds = [];
-  let totalSlope = 0, totalAz = 0, validSlope = 0, validAz = 0;
+  let totalSlope = 0, totalAz = 0, totalElev = 0, validSlope = 0, validAz = 0, validElev = 0;
 
   data.forEach((pt, i) => {
-    const rating = solarRating(pt.slope, pt.azimuth);
+    const rating = solarRating(pt.lat, pt.slope, pt.azimuth);
     const color  = rating === 'good' ? '#3ddc84' : rating === 'mid' ? '#f0c040' : '#ff5252';
 
     // Map marker
@@ -213,8 +298,9 @@ function renderData(data) {
     markers.push(marker);
     bounds.push([pt.lat, pt.lon]);
 
-    if (pt.slope   != null) { totalSlope += pt.slope;   validSlope++; }
-    if (pt.azimuth != null) { totalAz    += pt.azimuth; validAz++; }
+    if (pt.slope     != null) { totalSlope += pt.slope;     validSlope++; }
+    if (pt.azimuth   != null) { totalAz    += pt.azimuth;   validAz++; }
+    if (pt.elevation != null) { totalElev  += pt.elevation; validElev++; }
 
     // Table row — textContent only, no innerHTML
     const tr = tbody.insertRow();
@@ -232,24 +318,43 @@ function renderData(data) {
 
   const avgSlope = validSlope ? totalSlope / validSlope : null;
   const avgAz    = validAz    ? totalAz    / validAz    : null;
+  const avgElev  = validElev  ? totalElev  / validElev  : null;
   const centerLat = data.reduce((s, p) => s + p.lat, 0) / data.length;
   const yieldEst  = estimateYield(centerLat, avgSlope, avgAz);
-  const optTilt   = (centerLat * 0.9).toFixed(0);
+  const optTilt   = (Math.abs(centerLat) * 0.9).toFixed(0);
+  const facing    = optimalAzimuth(centerLat) === 180 ? 'South' : 'North';
 
-  document.getElementById('stat-points').textContent   = data.length;
+  document.getElementById('stat-points').textContent    = data.length;
   document.getElementById('stat-avg-slope').textContent = avgSlope != null ? avgSlope.toFixed(1) : '—';
   document.getElementById('stat-avg-az').textContent    = avgAz    != null ? Math.round(avgAz)   : '—';
+  document.getElementById('stat-avg-elev').textContent  = avgElev  != null ? avgElev.toFixed(0)   : '—';
 
-  const lats = data.map(p => p.lat);
-  const lons = data.map(p => p.lon);
-  const dLat = (Math.max(...lats) - Math.min(...lats)) * 111000;
-  const dLon = (Math.max(...lons) - Math.min(...lons)) * 111000 * Math.cos(centerLat * Math.PI / 180);
-  const area = Math.round(dLat * dLon);
+  // Site boundary: convex hull of the survey points, drawn on the map and
+  // used for a more accurate area estimate than a plain bounding box.
+  let area;
+  if (data.length >= 3) {
+    const hull = convexHull(data);
+    area = Math.round(polygonAreaM2(hull, centerLat));
+    boundaryLayer = L.polygon(hull.map(([lon, lat]) => [lat, lon]), {
+      color: '#f0c040',
+      weight: 1.5,
+      dashArray: '4 4',
+      fillColor: '#f0c040',
+      fillOpacity: 0.06,
+    }).addTo(map);
+  } else {
+    const lats = data.map(p => p.lat);
+    const lons = data.map(p => p.lon);
+    const dLat = (Math.max(...lats) - Math.min(...lats)) * 111000;
+    const dLon = (Math.max(...lons) - Math.min(...lons)) * 111000 * Math.cos(centerLat * Math.PI / 180);
+    area = Math.round(dLat * dLon);
+  }
   document.getElementById('stat-area').textContent = area > 0 ? area.toLocaleString() : '—';
 
-  document.getElementById('badge-tilt').textContent  = optTilt + '°';
-  document.getElementById('badge-yield').textContent = yieldEst.toLocaleString() + ' kWh/kWp/yr';
-  document.getElementById('point-count').textContent = data.length + ' POINTS LOADED';
+  document.getElementById('badge-tilt').textContent   = optTilt + '°';
+  document.getElementById('badge-facing').textContent = facing;
+  document.getElementById('badge-yield').textContent  = yieldEst.toLocaleString() + ' kWh/kWp/yr';
+  document.getElementById('point-count').textContent  = data.length + ' POINTS LOADED';
 }
 
 // ─── AI panel helpers ─────────────────────────────────────
@@ -300,9 +405,14 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
   const elevations = currentData.filter(p => p.elevation != null).map(p => p.elevation);
   const avg = arr => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 'N/A';
 
+  const latLabel = `${Math.abs(centerLat).toFixed(4)}°${centerLat >= 0 ? 'N' : 'S'}`;
+  const lonLabel = `${Math.abs(centerLon).toFixed(4)}°${centerLon >= 0 ? 'E' : 'W'}`;
+  const facingLabel = optimalAzimuth(centerLat) === 180 ? 'south (180°)' : 'north (0°)';
+
   const userPrompt =
     `Analyze this photovoltaic installation site based on geodetic measurements:\n\n` +
-    `LOCATION: ${centerLat.toFixed(4)}°N, ${centerLon.toFixed(4)}°E\n` +
+    `LOCATION: ${latLabel}, ${lonLabel}\n` +
+    `HEMISPHERE-OPTIMAL PANEL FACING: ${facingLabel}\n` +
     `MEASUREMENT POINTS: ${currentData.length}\n` +
     `AVERAGE SLOPE: ${avg(slopes)}°\n` +
     `SLOPE RANGE: ${slopes.length ? Math.min(...slopes).toFixed(1) + '° – ' + Math.max(...slopes).toFixed(1) + '°' : 'N/A'}\n` +
@@ -326,7 +436,7 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
         'anthropic-beta': 'prompt-caching-2024-07-31',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
         max_tokens: 1000,
         stream: true,
         system: [
@@ -432,7 +542,7 @@ document.getElementById('export-csv-btn').addEventListener('click', () => {
   if (!currentData.length) return;
   const header = 'lat,lon,elevation,slope,azimuth,rating';
   const rows = currentData.map(pt =>
-    [pt.lat, pt.lon, pt.elevation ?? '', pt.slope ?? '', pt.azimuth ?? '', solarRating(pt.slope, pt.azimuth)].join(',')
+    [pt.lat, pt.lon, pt.elevation ?? '', pt.slope ?? '', pt.azimuth ?? '', solarRating(pt.lat, pt.slope, pt.azimuth)].join(',')
   );
   const csv  = [header, ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
