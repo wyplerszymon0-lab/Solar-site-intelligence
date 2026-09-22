@@ -14,13 +14,32 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 
 ## Features
 
-- **Interactive map visualization** — measurement points rendered on a dark-themed Leaflet map with color-coded solar potential ratings (good / mid / poor)
-- **Site boundary overlay** — convex hull drawn around the survey points, used for an accurate area estimate (instead of an inflated bounding-box guess)
-- **Automatic site statistics** — average slope, azimuth, elevation, and site area
+**Map & site geometry**
+- **Interactive map visualization** — measurement points on a dark-themed Leaflet map, color-coded by solar potential (good / mid / poor)
+- **Marker clustering & heatmap view** — large surveys (150+ points) auto-cluster; a Markers/Heatmap toggle switches the map view
+- **Site boundary overlay** — convex hull drawn around the survey points, used for an accurate area estimate instead of an inflated bounding-box guess
+
+**Site statistics & analysis**
 - **Hemisphere-aware optimal tilt & facing** — latitude-based panel angle and south/north facing recommendation, correct on both sides of the equator
-- **Estimated annual yield** — kWh/kWp/year estimate adjusted for terrain and location
-- **AI site report** — Claude AI analyzes your data and returns a structured report covering panel configuration, risk factors, and optimization recommendations
-- **Optional local key storage** — the API key can be remembered in this browser only (`localStorage`, opt-in, off by default)
+- **Estimated annual + seasonal yield** — kWh/kWp/year estimate, broken down by month using a solar-declination model (rough estimate, not TMY-grade)
+- **Row-spacing / panel-count estimate** — suggested row spacing and how many rows fit the site, sized to avoid self-shading near the winter solstice
+- **Benchmark comparison** — estimated yield vs. a rough global reference (~1500 kWh/kWp/yr)
+- **Shading-risk & outlier flags** — heuristic per-point flags for a taller nearby neighbor on the sun side, or a statistically anomalous elevation reading
+- **Site charts** — rating distribution, elevation profile, per-point slope, azimuth compass rose, and monthly yield, all inline SVG
+
+**AI analysis**
+- **AI site report** — Claude analyzes your data and returns a structured report (panel configuration, risk factors, recommendations)
+- **Follow-up chat** — ask follow-up questions about the report in the same conversation
+- **Model picker** — choose Opus 5, Sonnet 5, or Haiku 4.5 depending on quality/speed/cost needs
+
+**Data in & out**
+- **Saved analyses** — name and save analyses locally (`localStorage`) and reload them later from this browser
+- **Auto-restored last session** — reopening the page restores your most recent analysis
+- **Exports** — CSV (with ratings/flags), GeoJSON (points + site boundary polygon), a printable PDF report, and a shareable link that encodes the dataset in the URL (no server involved)
+- **Optional local key storage** — the API key can be remembered in this browser only (opt-in, off by default)
+
+**Other**
+- **Bilingual UI** — English / Polish toggle; the AI is also asked to respond in the selected language
 
 ## Demo
 
@@ -59,11 +78,15 @@ No backend required — runs entirely in the browser.
 
 There is no server: your key is used only to call `api.anthropic.com` directly from your own browser tab. That also means you're pasting a real API key into a static webpage — only do this with a key you control, on a device you trust. Check "Remember on this device" only if you want it kept in `localStorage` between visits; leave it unchecked to keep the key session-only.
 
+## A note on the heuristic estimates
+
+Row spacing, shading risk, outlier detection, seasonal yield, and the benchmark comparison are all **rough, client-side approximations** built from the uploaded lat/lon/elevation/slope/azimuth alone — there's no real irradiance data (e.g. PVGIS/TMY), no true 3D shading model, and no soil or grid-connection analysis behind them. Treat them as a quick first read, not a substitute for a proper site assessment.
+
 ## Tech Stack
 
-- **Vanilla HTML/CSS/JS** — zero build step, zero dependencies
-- **Leaflet.js** — interactive map rendering, CartoDB dark basemap tiles
-- **Claude API** (Claude Sonnet 5) — AI site analysis
+- **Vanilla HTML/CSS/JS** — zero build step
+- **Leaflet.js** + **Leaflet.markercluster** + **Leaflet.heat** — map rendering, clustering, heatmap view
+- **Claude API** (Opus 5 / Sonnet 5 / Haiku 4.5, selectable) — AI site analysis and follow-up chat
 - **GitHub Pages** — hosting
 
 ## Background

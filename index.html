@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" id="html-root">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -25,9 +25,40 @@
     crossorigin="anonymous"
   ></script>
 
+  <!-- Leaflet.heat 0.2.0 — heatmap view toggle -->
+  <script
+    src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"
+    integrity="sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0"
+    crossorigin="anonymous"
+  ></script>
+
+  <!-- Leaflet.markercluster 1.5.3 — clustering for large datasets -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+    integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV"
+    crossorigin="anonymous"
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    integrity="sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+"
+    crossorigin="anonymous"
+  />
+  <script
+    src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
+    integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr"
+    crossorigin="anonymous"
+  ></script>
+
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<div id="print-header" class="print-only">
+  <div class="print-title">Solar Site Intelligence — Site Report</div>
+  <div class="print-meta" id="print-meta"></div>
+</div>
 
 <header>
   <div class="logo">
@@ -35,8 +66,12 @@
     Solar<span>Site</span> Intelligence
   </div>
   <div class="header-meta">
-    <span><span class="status-dot"></span>SYSTEM READY</span>
+    <span><span class="status-dot"></span><span data-i18n="header.ready">SYSTEM READY</span></span>
     <span id="point-count">0 POINTS LOADED</span>
+    <div class="lang-switch" id="lang-switch">
+      <button type="button" data-lang="en" class="active">EN</button>
+      <button type="button" data-lang="pl">PL</button>
+    </div>
   </div>
 </header>
 
@@ -45,91 +80,148 @@
   <!-- SIDEBAR -->
   <div class="sidebar">
 
-    <!-- API KEY -->
+    <!-- API KEY + MODEL -->
     <div class="section">
-      <div class="section-label">Configuration</div>
+      <div class="section-label" data-i18n="cfg.label">Configuration</div>
       <div class="input-group">
-        <div class="input-label">ANTHROPIC API KEY</div>
+        <div class="input-label" data-i18n="cfg.apiKey">ANTHROPIC API KEY</div>
         <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off">
         <label class="remember-key">
           <input type="checkbox" id="remember-key">
-          Remember on this device (stored only in this browser)
+          <span data-i18n="cfg.remember">Remember on this device (stored only in this browser)</span>
         </label>
-        <div class="key-note">
+        <div class="key-note" data-i18n="cfg.keyNote">
           Sent directly from your browser to api.anthropic.com — never touches a backend.
           Only use a key on devices you trust.
         </div>
+      </div>
+      <div class="input-group">
+        <div class="input-label" data-i18n="cfg.model">AI MODEL</div>
+        <select id="model-select">
+          <option value="claude-opus-5" data-i18n="model.opus">Opus 5 — highest quality, slower</option>
+          <option value="claude-sonnet-5" selected data-i18n="model.sonnet">Sonnet 5 — balanced (recommended)</option>
+          <option value="claude-haiku-4-5-20251001" data-i18n="model.haiku">Haiku 4.5 — fastest, cheapest</option>
+        </select>
       </div>
     </div>
 
     <!-- DATA INPUT -->
     <div class="section">
-      <div class="section-label">Data Input</div>
+      <div class="section-label" data-i18n="data.label">Data Input</div>
       <div class="upload-zone" id="upload-zone">
         <input type="file" id="csv-input" accept=".csv">
         <div class="upload-icon">◈</div>
         <div class="upload-text">
-          <strong>Upload CSV File</strong>
-          Drop geodetic measurement data
+          <strong data-i18n="upload.title">Upload CSV File</strong>
+          <span data-i18n="upload.subtitle">Drop geodetic measurement data</span>
         </div>
       </div>
       <div class="csv-format">
-        Expected columns:<br>
+        <span data-i18n="csv.expected">Expected columns:</span><br>
         <code>lat, lon, elevation, slope, azimuth</code><br>
-        <code>lat, lon, elevation</code> (minimum)
+        <code data-i18n="csv.min">lat, lon, elevation (minimum)</code>
       </div>
-      <button class="btn btn-ghost" id="demo-btn" style="margin-top:12px">⬡ Load Demo Data (Portugal)</button>
+      <button class="btn btn-ghost" id="demo-btn" style="margin-top:12px" data-i18n="demo.btn">⬡ Load Demo Data (Portugal)</button>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="section">
+      <div class="section-label" data-i18n="history.label">Saved Analyses (this browser)</div>
+      <button class="btn btn-ghost" id="save-history-btn" disabled data-i18n="history.save">💾 Save Current Analysis</button>
+      <div class="history-list" id="history-list">
+        <div class="history-empty" id="history-empty" data-i18n="history.empty">No saved analyses yet</div>
+      </div>
     </div>
 
     <!-- SITE STATISTICS -->
     <div class="section" id="stats-section" style="display:none">
-      <div class="section-label">Site Statistics</div>
+      <div class="section-label" data-i18n="stats.label">Site Statistics</div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value" id="stat-points">—</div>
-          <div class="stat-label">Measure Points</div>
+          <div class="stat-label" data-i18n="stat.points">Measure Points</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-avg-slope">—</div>
-          <div class="stat-label">Avg Slope °</div>
+          <div class="stat-label" data-i18n="stat.avgSlope">Avg Slope °</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-avg-az">—</div>
-          <div class="stat-label">Avg Azimuth °</div>
+          <div class="stat-label" data-i18n="stat.avgAz">Avg Azimuth °</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-avg-elev">—</div>
-          <div class="stat-label">Avg Elevation m</div>
+          <div class="stat-label" data-i18n="stat.avgElev">Avg Elevation m</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-area">—</div>
-          <div class="stat-label">Site Area est. m²</div>
+          <div class="stat-label" data-i18n="stat.area">Site Area est. m²</div>
+        </div>
+        <div class="stat-card" id="stat-rows-card" title="">
+          <div class="stat-value" id="stat-rows">—</div>
+          <div class="stat-label" data-i18n="stat.rows">Est. Panel Rows</div>
+        </div>
+        <div class="stat-card stat-card-wide">
+          <div class="stat-value" id="stat-benchmark">—</div>
+          <div class="stat-label" data-i18n="stat.benchmark">vs Typical Yield (~1500 kWh/kWp/yr)</div>
         </div>
       </div>
-      <button class="btn btn-ghost" id="export-csv-btn" style="display:none;margin-top:14px">
-        ↓ Export CSV with Ratings
-      </button>
+
+      <div class="export-actions">
+        <button class="btn btn-ghost" id="export-csv-btn" style="display:none" data-i18n="export.csv">↓ CSV</button>
+        <button class="btn btn-ghost" id="export-geojson-btn" style="display:none" data-i18n="export.geojson">↓ GeoJSON</button>
+        <button class="btn btn-ghost" id="export-pdf-btn" style="display:none" data-i18n="export.pdf">🖨 PDF Report</button>
+        <button class="btn btn-ghost" id="share-link-btn" style="display:none" data-i18n="export.share">🔗 Share Link</button>
+      </div>
+    </div>
+
+    <!-- SITE CHARTS -->
+    <div class="section" id="charts-section" style="display:none">
+      <div class="section-label" data-i18n="charts.label">Site Charts</div>
+
+      <div class="chart-block">
+        <div class="chart-title" data-i18n="charts.rating">Rating Distribution</div>
+        <div id="chart-rating"></div>
+      </div>
+      <div class="chart-block">
+        <div class="chart-title" data-i18n="charts.elevation">Elevation Profile</div>
+        <div id="chart-elevation"></div>
+      </div>
+      <div class="chart-block">
+        <div class="chart-title" data-i18n="charts.slope">Slope per Point °</div>
+        <div id="chart-slope"></div>
+      </div>
+      <div class="chart-block">
+        <div class="chart-title" data-i18n="charts.azimuth">Azimuth vs Optimal</div>
+        <div id="chart-compass"></div>
+      </div>
+      <div class="chart-block">
+        <div class="chart-title" data-i18n="charts.seasonal">Est. Monthly Yield</div>
+        <div id="chart-seasonal"></div>
+      </div>
     </div>
 
     <!-- MEASUREMENT POINTS TABLE -->
     <div class="section" id="table-section" style="display:none">
-      <div class="section-label">Measurement Points</div>
+      <div class="section-label" data-i18n="table.label">Measurement Points</div>
       <div style="overflow-x:auto">
         <table class="data-table" id="data-table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>LAT</th>
-              <th>LON</th>
-              <th>ELEV</th>
-              <th>SLOPE</th>
-              <th>AZ</th>
-              <th>RATING</th>
+              <th data-i18n="table.hash">#</th>
+              <th data-i18n="table.lat">LAT</th>
+              <th data-i18n="table.lon">LON</th>
+              <th data-i18n="table.elev">ELEV</th>
+              <th data-i18n="table.slope">SLOPE</th>
+              <th data-i18n="table.az">AZ</th>
+              <th data-i18n="table.rating">RATING</th>
+              <th data-i18n="table.flags">FLAGS</th>
             </tr>
           </thead>
           <tbody id="table-body"></tbody>
         </table>
       </div>
+      <div class="table-note" id="table-truncated-note" style="display:none"></div>
     </div>
 
   </div><!-- /sidebar -->
@@ -142,40 +234,44 @@
       <div class="map-empty" id="map-empty">
         <div class="empty-grid"></div>
         <div class="empty-cross"></div>
-        <div style="font-size:11px;letter-spacing:1px;text-align:center;z-index:1">
-          AWAITING GEODETIC DATA<br>
-          <span style="font-size:9px;color:var(--border);letter-spacing:2px">UPLOAD CSV TO BEGIN ANALYSIS</span>
+        <div class="empty-text">
+          <span data-i18n="map.awaiting">AWAITING GEODETIC DATA</span><br>
+          <span class="empty-sub" data-i18n="map.uploadPrompt">UPLOAD CSV TO BEGIN ANALYSIS</span>
         </div>
       </div>
       <div id="map"></div>
+      <div class="map-view-toggle" id="map-view-toggle" style="display:none">
+        <button type="button" class="active" data-view="markers" data-i18n="map.markers">Markers</button>
+        <button type="button" data-view="heatmap" data-i18n="map.heatmap">Heatmap</button>
+      </div>
       <div class="map-overlay" id="map-overlay" style="display:none">
-        <div class="map-badge">SITE: <strong id="badge-site">Portugal PV Site</strong></div>
-        <div class="map-badge">OPTIMAL TILT: <strong id="badge-tilt">—°</strong></div>
-        <div class="map-badge">PANEL FACING: <strong id="badge-facing">—</strong></div>
-        <div class="map-badge">EST. YIELD: <strong id="badge-yield">— kWh/kWp/yr</strong></div>
+        <div class="map-badge"><span data-i18n="map.site">SITE:</span> <strong id="badge-site">Portugal PV Site</strong></div>
+        <div class="map-badge"><span data-i18n="map.tilt">OPTIMAL TILT:</span> <strong id="badge-tilt">—°</strong></div>
+        <div class="map-badge"><span data-i18n="map.facing">PANEL FACING:</span> <strong id="badge-facing">—</strong></div>
+        <div class="map-badge"><span data-i18n="map.yield">EST. YIELD:</span> <strong id="badge-yield">— kWh/kWp/yr</strong></div>
       </div>
     </div>
 
     <!-- AI PANEL -->
     <div class="ai-panel">
       <div class="ai-header">
-        <div class="ai-title">AI Site Analysis</div>
+        <div class="ai-title" data-i18n="ai.title">AI Site Analysis</div>
         <div class="ai-actions">
-          <button class="btn btn-ghost btn-sm" id="copy-report-btn" style="display:none">
-            ⎘ Copy Report
-          </button>
-          <button class="btn btn-primary btn-sm" id="analyze-btn" disabled>
-            Analyze Site →
-          </button>
+          <button class="btn btn-ghost btn-sm" id="copy-report-btn" style="display:none" data-i18n="ai.copy">⎘ Copy Report</button>
+          <button class="btn btn-primary btn-sm" id="analyze-btn" disabled data-i18n="ai.analyze">Analyze Site →</button>
         </div>
       </div>
       <div class="ai-body" id="ai-body">
         <div class="ai-placeholder">
-          <span>Waiting for geodetic data upload</span>
-          <span>AI will analyze slope, azimuth, location</span>
-          <span>Recommendations for PV panel layout</span>
-          <span>Estimated annual energy yield</span>
+          <span data-i18n="ai.placeholder1">Waiting for geodetic data upload</span>
+          <span data-i18n="ai.placeholder2">AI will analyze slope, azimuth, location</span>
+          <span data-i18n="ai.placeholder3">Recommendations for PV panel layout</span>
+          <span data-i18n="ai.placeholder4">Estimated annual energy yield</span>
         </div>
+      </div>
+      <div class="ai-followup" id="ai-followup" style="display:none">
+        <input type="text" id="followup-input" data-i18n-placeholder="chat.placeholder" placeholder="Ask a follow-up question...">
+        <button class="btn btn-primary btn-sm" id="followup-btn" data-i18n="chat.send">Send</button>
       </div>
     </div>
 
