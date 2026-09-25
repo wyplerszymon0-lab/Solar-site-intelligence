@@ -273,10 +273,14 @@ let currentMapView = 'markers';
 // ─── Map ──────────────────────────────────────────────────
 
 function initMap() {
-  map = L.map('map', { zoomControl: true, attributionControl: true }).setView([38.7223, -9.1393], 2);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 20,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  // Zoom sits bottom-right so it doesn't cover the site badges in the top-left corner.
+  map = L.map('map', { zoomControl: false, attributionControl: true }).setView([38.7223, -9.1393], 2);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  // OpenStreetMap's standard tiles need no API key (CARTO's basemaps now do and
+  // render "API KEY REQUIRED" instead). style.css darkens them to fit the theme.
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 }
 
@@ -329,6 +333,17 @@ function optimalAzimuth(lat) {
 function azimuthDiff(az, target) {
   const d = Math.abs(az - target);
   return Math.min(d, 360 - d);
+}
+
+// Circular mean of compass bearings. An arithmetic mean breaks across north:
+// 350° and 10° average to 180° (due south) instead of 0°, which inverted the
+// result for north-facing sites in the southern hemisphere.
+function circularMeanDeg(bearings) {
+  if (!bearings.length) return null;
+  let x = 0, y = 0;
+  bearings.forEach(b => { x += Math.cos(b * Math.PI / 180); y += Math.sin(b * Math.PI / 180); });
+  if (Math.hypot(x, y) < 1e-9 * bearings.length) return null; // directions cancel out
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
 function solarRating(lat, slope, azimuth) {
@@ -437,14 +452,13 @@ function computeSiteStats(data) {
   const counts = { good: 0, mid: 0, bad: 0 };
   ratings.forEach(r => counts[r]++);
 
-  let totalSlope = 0, totalAz = 0, totalElev = 0, validSlope = 0, validAz = 0, validElev = 0;
+  let totalSlope = 0, totalElev = 0, validSlope = 0, validElev = 0;
   data.forEach(pt => {
     if (pt.slope     != null) { totalSlope += pt.slope;     validSlope++; }
-    if (pt.azimuth   != null) { totalAz    += pt.azimuth;   validAz++; }
     if (pt.elevation != null) { totalElev  += pt.elevation; validElev++; }
   });
   const avgSlope = validSlope ? totalSlope / validSlope : null;
-  const avgAz    = validAz    ? totalAz    / validAz    : null;
+  const avgAz    = circularMeanDeg(data.filter(p => p.azimuth != null).map(p => p.azimuth));
   const avgElev  = validElev  ? totalElev  / validElev  : null;
 
   const centerLat = data.reduce((s, p) => s + p.lat, 0) / data.length;
@@ -631,7 +645,8 @@ function renderCharts(stats) {
 }
 
 // ─── CSV Parser ───────────────────────────────────────────
-// Handles RFC 4180 quoted fields (commas and newlines inside quotes, escaped quotes)
+// Handles RFC 4180 quoted fields (commas and escaped quotes inside quotes).
+// Records are split on newlines first, so a quoted field cannot span lines.
 
 function parseCSVLine(line) {
   const fields = [];
@@ -893,7 +908,7 @@ function renderData(data, opts = {}) {
 
   document.getElementById('stat-points').textContent    = data.length;
   document.getElementById('stat-avg-slope').textContent = stats.avgSlope != null ? stats.avgSlope.toFixed(1) : '—';
-  document.getElementById('stat-avg-az').textContent    = stats.avgAz    != null ? Math.round(stats.avgAz)   : '—';
+  document.getElementById('stat-avg-az').textContent    = stats.avgAz    != null ? Math.round(stats.avgAz) % 360 : '—';
   document.getElementById('stat-avg-elev').textContent  = stats.avgElev  != null ? stats.avgElev.toFixed(0)  : '—';
   document.getElementById('stat-area').textContent      = stats.area > 0 ? stats.area.toLocaleString() : '—';
   document.getElementById('stat-rows').textContent      = stats.rows ?? '—';
@@ -950,8 +965,15 @@ function resetAiPanel(placeholderText) {
   aiBody.appendChild(ph);
 }
 
+// Escape first, then apply the two markdown rules we render: the model's text
+// must never be parsed as HTML on a page that holds the user's API key.
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function formatAIResponse(text) {
-  return text
+  return escapeHtml(text)
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--accent)">$1</strong>');
 }
@@ -966,7 +988,6 @@ function systemPrompt() {
 
 function buildInitialPrompt(stats) {
   const slopes     = currentData.filter(p => p.slope     != null).map(p => p.slope);
-  const azimuths   = currentData.filter(p => p.azimuth   != null).map(p => p.azimuth);
   const elevations = currentData.filter(p => p.elevation != null).map(p => p.elevation);
   const avg = arr => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 'N/A';
   const facingLabel = stats.facingAz === 180 ? 'south (180°)' : 'north (0°)';
@@ -978,7 +999,7 @@ function buildInitialPrompt(stats) {
     `MEASUREMENT POINTS: ${currentData.length}\n` +
     `AVERAGE SLOPE: ${avg(slopes)}°\n` +
     `SLOPE RANGE: ${slopes.length ? Math.min(...slopes).toFixed(1) + '° – ' + Math.max(...slopes).toFixed(1) + '°' : 'N/A'}\n` +
-    `AVERAGE AZIMUTH: ${avg(azimuths)}°\n` +
+    `AVERAGE AZIMUTH (circular mean): ${stats.avgAz != null ? stats.avgAz.toFixed(1) : 'N/A'}°\n` +
     `ELEVATION RANGE: ${elevations.length ? Math.min(...elevations).toFixed(0) + ' – ' + Math.max(...elevations).toFixed(0) + ' m' : 'N/A'}\n` +
     `ESTIMATED ANNUAL YIELD (site tool estimate): ${stats.yieldEst} kWh/kWp/yr\n` +
     `SUGGESTED ROW COUNT (site tool estimate): ${stats.rows ?? 'N/A'}\n\n` +
@@ -1020,26 +1041,32 @@ async function streamMessage(userText, { append }) {
   aiBody.appendChild(responseEl);
   aiBody.scrollTop = aiBody.scrollHeight;
 
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+  };
+  const body = {
+    model,
+    // Opus 5 and Sonnet 5 think before answering by default, and thinking tokens
+    // count against max_tokens: the old 1000 could leave no room for the report.
+    max_tokens: 16000,
+    stream: true,
+    system: systemPrompt(),
+    messages: conversation,
+  };
+  if (model === 'claude-opus-5') {
+    // If Opus 5's safety classifiers decline, re-run on Anthropic's recommended model.
+    headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+    body.fallbacks = 'default';
+  }
+
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'anthropic-beta': 'prompt-caching-2024-07-31',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 1000,
-        stream: true,
-        system: [
-          // Cache the static expert persona — reused across analyses
-          { type: 'text', text: systemPrompt(), cache_control: { type: 'ephemeral' } },
-        ],
-        messages: conversation,
-      }),
+      headers,
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -1051,6 +1078,7 @@ async function streamMessage(userText, { append }) {
     const decoder = new TextDecoder();
     let buffer   = '';
     let fullText = '';
+    let stopReason = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -1062,17 +1090,29 @@ async function streamMessage(userText, { append }) {
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]') continue;
-        try {
-          const event = JSON.parse(raw);
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            fullText += event.delta.text;
-            responseEl.innerHTML = formatAIResponse(fullText);
-            aiBody.scrollTop = aiBody.scrollHeight;
-          }
-        } catch { /* incomplete JSON chunk — safe to skip */ }
+        let event;
+        try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          fullText += event.delta.text;
+          responseEl.innerHTML = formatAIResponse(fullText);
+          aiBody.scrollTop = aiBody.scrollHeight;
+        } else if (event.type === 'message_delta' && event.delta?.stop_reason) {
+          stopReason = event.delta.stop_reason;
+        } else if (event.type === 'error') {
+          // e.g. overloaded_error mid-stream — the HTTP status was already 200
+          throw new Error(event.error?.message || event.error?.type || 'stream error');
+        }
       }
+    }
+
+    if (stopReason === 'refusal') throw new Error('the model declined this request');
+    if (!fullText) throw new Error('empty response');
+    if (stopReason === 'max_tokens') {
+      const note = document.createElement('div');
+      note.className = 'ai-truncated';
+      note.textContent = '… (response cut off at the length limit)';
+      responseEl.appendChild(note);
     }
 
     conversation.push({ role: 'assistant', content: fullText });
@@ -1083,6 +1123,7 @@ async function streamMessage(userText, { append }) {
     return true;
   } catch (err) {
     conversation.pop(); // the optimistic user turn didn't get a reply — drop it
+    responseEl.remove(); // discard any partial text from a failed or declined stream
     if (!append) aiBody.innerHTML = '';
     const errEl = document.createElement('div');
     errEl.style.cssText = 'color:var(--red);font-size:12px;margin-top:8px';

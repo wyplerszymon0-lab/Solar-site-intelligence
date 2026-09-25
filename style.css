@@ -214,6 +214,12 @@ input:focus, select:focus { border-color: var(--accent); }
 
 .leaflet-control-attribution a { color: var(--text-mid) !important; }
 
+/* Dark basemap: standard OpenStreetMap tiles (no API key) inverted to match the
+   theme. Only the tile pane is filtered, so markers and overlays keep their colors. */
+.leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.4);
+}
+
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip { background: #111518 !important; }
 
@@ -640,6 +646,7 @@ input:focus, select:focus { border-color: var(--accent); }
 .ai-placeholder span::before { content: '//'; color: var(--border); }
 
 .ai-response { white-space: pre-wrap; color: var(--text); }
+.ai-truncated { color: var(--text-dim); font-style: italic; margin-top: 8px; }
 
 .ai-response h3 {
   font-family: 'Syne', sans-serif;
