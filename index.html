@@ -163,7 +163,7 @@
         </div>
         <div class="stat-card stat-card-wide">
           <div class="stat-value" id="stat-benchmark">—</div>
-          <div class="stat-label" data-i18n="stat.benchmark">vs Typical Yield (~1500 kWh/kWp/yr)</div>
+          <div class="stat-label" data-i18n="stat.benchmark">Yield vs optimal orientation at this site</div>
         </div>
       </div>
 
@@ -249,6 +249,7 @@
         <div class="map-badge"><span data-i18n="map.tilt">OPTIMAL TILT:</span> <strong id="badge-tilt">—°</strong></div>
         <div class="map-badge"><span data-i18n="map.facing">PANEL FACING:</span> <strong id="badge-facing">—</strong></div>
         <div class="map-badge"><span data-i18n="map.yield">EST. YIELD:</span> <strong id="badge-yield">— kWh/kWp/yr</strong></div>
+        <div class="map-badge map-badge-note" id="badge-source"></div>
       </div>
     </div>
 
@@ -281,6 +282,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="solar-model.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

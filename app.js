@@ -13,7 +13,6 @@ const DEMO_DATA = [
   { lat: 38.7214, lon: -9.1405, elevation: 137, slope: 7,  azimuth: 188 },
 ];
 
-const BENCHMARK_YIELD_KWH = 1500;   // rough global reference for a well-oriented, well-tilted system
 const CLUSTER_THRESHOLD   = 150;    // switch to marker clustering above this many points
 const SHADING_SCAN_CAP    = 1000;   // skip the O(n²) shading heuristic above this many points
 const TABLE_ROW_CAP       = 500;    // render at most this many rows in the points table
@@ -62,7 +61,7 @@ const I18N = {
     'stat.avgElev': 'Avg Elevation m',
     'stat.area': 'Site Area est. m²',
     'stat.rows': 'Est. Panel Rows',
-    'stat.benchmark': 'vs Typical Yield (~1500 kWh/kWp/yr)',
+    'stat.benchmark': 'Yield vs optimal orientation at this site',
     'export.csv': '↓ CSV',
     'export.geojson': '↓ GeoJSON',
     'export.pdf': '🖨 PDF Report',
@@ -130,6 +129,9 @@ const I18N = {
     'toast.shareLoaded': 'Loaded data from share link',
     'toast.shareLong': 'Share link is long — for big datasets, Saved Analyses works better',
     'toast.lastSessionRestored': 'Restored your last session',
+    'source.satellite': 'NASA POWER satellite climatology 2001–2020',
+    'source.loading': 'Fetching satellite irradiance…',
+    'source.heuristic': 'Rough estimate — satellite data unavailable',
   },
   pl: {
     'header.ready': 'SYSTEM GOTOWY',
@@ -160,7 +162,7 @@ const I18N = {
     'stat.avgElev': 'Śr. wysokość m',
     'stat.area': 'Szac. powierzchnia m²',
     'stat.rows': 'Szac. liczba rzędów',
-    'stat.benchmark': 'vs typowa wydajność (~1500 kWh/kWp/rok)',
+    'stat.benchmark': 'Wydajność vs optymalna orientacja w tym miejscu',
     'export.csv': '↓ CSV',
     'export.geojson': '↓ GeoJSON',
     'export.pdf': '🖨 Raport PDF',
@@ -228,6 +230,9 @@ const I18N = {
     'toast.shareLoaded': 'Wczytano dane z linku',
     'toast.shareLong': 'Link jest długi — dla dużych zbiorów lepiej sprawdzi się zapis w Zapisanych analizach',
     'toast.lastSessionRestored': 'Przywrócono ostatnią sesję',
+    'source.satellite': 'Dane satelitarne NASA POWER 2001–2020',
+    'source.loading': 'Pobieranie danych satelitarnych…',
+    'source.heuristic': 'Przybliżony szacunek — brak danych satelitarnych',
   },
 };
 
@@ -445,6 +450,58 @@ function detectOutliers(points) {
   return points.map(p => p.elevation != null && Math.abs(p.elevation - mean) > 2 * sd);
 }
 
+// ─── Satellite irradiance (NASA POWER) ─────────────────────
+// Monthly climatology for the site centre, cached in memory and in this
+// browser (it is ~40 numbers per location and changes only yearly).
+
+const CLIMATOLOGY_STORAGE = 'solarSite.climatology';
+const climatologyCache = new Map(); // key -> climatology object | 'loading' | 'error'
+
+function climatologyKey(lat, lon) {
+  return `${lat.toFixed(2)},${lon.toFixed(2)}`;
+}
+
+(function loadStoredClimatology() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CLIMATOLOGY_STORAGE) || '{}');
+    Object.entries(stored).forEach(([k, v]) => climatologyCache.set(k, v));
+  } catch { /* ignore */ }
+})();
+
+function storeClimatology() {
+  const plain = {};
+  climatologyCache.forEach((v, k) => { if (typeof v === 'object') plain[k] = v; });
+  try { localStorage.setItem(CLIMATOLOGY_STORAGE, JSON.stringify(plain)); } catch { /* ignore */ }
+}
+
+// Fetches the climatology if needed; calls onReady() once it (or a failure) is known.
+async function ensureClimatology(lat, lon, onReady) {
+  const key = climatologyKey(lat, lon);
+  if (climatologyCache.has(key)) return;
+  climatologyCache.set(key, 'loading');
+  try {
+    const res = await fetch(SolarModel.powerClimatologyUrl(lat, lon));
+    if (!res.ok) throw new Error(`NASA POWER HTTP ${res.status}`);
+    climatologyCache.set(key, SolarModel.parsePowerClimatology(await res.json()));
+    storeClimatology();
+  } catch (err) {
+    console.warn('[Solar Site] satellite irradiance unavailable, using rough estimate:', err);
+    climatologyCache.set(key, 'error');
+  }
+  onReady();
+}
+
+// Tilt (whole degrees, equator-facing) that maximises annual yield in this climate.
+function optimalTiltFor(clim, lat) {
+  const az = optimalAzimuth(lat);
+  let best = { tilt: 0, yield: -Infinity };
+  for (let tilt = 0; tilt <= 75; tilt++) {
+    const y = SolarModel.monthlyYield(clim, lat, tilt, az).annual;
+    if (y > best.yield) best = { tilt, yield: y };
+  }
+  return best;
+}
+
 // Single source of truth for every derived number shown in the UI, and
 // reused by the exports, the AI prompt, and the chart renderers.
 function computeSiteStats(data) {
@@ -464,10 +521,28 @@ function computeSiteStats(data) {
   const centerLat = data.reduce((s, p) => s + p.lat, 0) / data.length;
   const centerLon = data.reduce((s, p) => s + p.lon, 0) / data.length;
 
-  const yieldEst  = estimateYield(centerLat, avgSlope, avgAz);
-  const optTilt   = Math.abs(centerLat) * 0.9;
   const facingAz  = optimalAzimuth(centerLat);
   const facing    = facingAz === 180 ? 'S' : 'N';
+
+  // Yield: from satellite irradiance when available, otherwise the old rough formula.
+  const clim = climatologyCache.get(climatologyKey(centerLat, centerLon));
+  let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null;
+  if (clim && typeof clim === 'object') {
+    const opt = optimalTiltFor(clim, centerLat);
+    optTilt = opt.tilt;
+    optimalYield = opt.yield;
+    const site = SolarModel.monthlyYield(clim, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz);
+    yieldEst = Math.round(site.annual);
+    seasonal = site.monthly.map(Math.round);
+    ghiAnnual = Math.round(clim.ghi.reduce((s, v, m) => s + v * [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m], 0));
+    yieldSource = 'satellite';
+  } else {
+    optTilt = Math.abs(centerLat) * 0.9;
+    yieldEst = estimateYield(centerLat, avgSlope, avgAz);
+    optimalYield = estimateYield(centerLat, optTilt, facingAz);
+    seasonal = seasonalYieldFactors(centerLat, optTilt).map(f => Math.round(f * yieldEst));
+    yieldSource = clim === 'error' ? 'heuristic' : 'loading';
+  }
 
   let hull = [], area;
   if (data.length >= 3) {
@@ -488,14 +563,14 @@ function computeSiteStats(data) {
     rows = Math.max(1, Math.floor(depthM / layout.spacing) + 1);
   }
 
-  const benchmarkPct = Math.round((yieldEst - BENCHMARK_YIELD_KWH) / BENCHMARK_YIELD_KWH * 100);
+  const benchmarkPct = Math.round((yieldEst - optimalYield) / optimalYield * 100);
   const shadingFlags = detectShading(data, centerLat);
   const outlierFlags = detectOutliers(data);
-  const seasonal = seasonalYieldFactors(centerLat, optTilt).map(f => Math.round(f * yieldEst));
 
   return {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
-    yieldEst, optTilt, facing, facingAz, hull, area,
+    yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual,
+    facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
 }
@@ -906,6 +981,16 @@ function renderData(data, opts = {}) {
     truncNote.style.display = 'none';
   }
 
+  renderStats(data, stats);
+
+  // Fetch satellite irradiance for this site; re-render the numbers when it arrives.
+  ensureClimatology(stats.centerLat, stats.centerLon, () => {
+    if (currentData === data) renderStats(data, computeSiteStats(data));
+  });
+}
+
+// Everything that depends on the yield model, so it can refresh on its own.
+function renderStats(data, stats) {
   document.getElementById('stat-points').textContent    = data.length;
   document.getElementById('stat-avg-slope').textContent = stats.avgSlope != null ? stats.avgSlope.toFixed(1) : '—';
   document.getElementById('stat-avg-az').textContent    = stats.avgAz    != null ? Math.round(stats.avgAz) % 360 : '—';
@@ -919,8 +1004,9 @@ function renderData(data, opts = {}) {
     : '';
 
   const benchEl = document.getElementById('stat-benchmark');
-  benchEl.textContent = (stats.benchmarkPct >= 0 ? '+' : '') + stats.benchmarkPct + '%';
-  benchEl.style.color = stats.benchmarkPct >= 0 ? 'var(--green)' : 'var(--red)';
+  benchEl.textContent = (stats.benchmarkPct > 0 ? '+' : '') + stats.benchmarkPct + '%';
+  // 0% means the surveyed orientation is already optimal for this climate.
+  benchEl.style.color = stats.benchmarkPct >= -5 ? 'var(--green)' : stats.benchmarkPct >= -15 ? 'var(--accent)' : 'var(--red)';
 
   document.getElementById('badge-site').textContent = (data === DEMO_DATA)
     ? t('demo.siteLabel')
@@ -928,6 +1014,7 @@ function renderData(data, opts = {}) {
   document.getElementById('badge-tilt').textContent   = stats.optTilt.toFixed(0) + '°';
   document.getElementById('badge-facing').textContent = stats.facing === 'S' ? t('facing.south') : t('facing.north');
   document.getElementById('badge-yield').textContent  = stats.yieldEst.toLocaleString() + ' kWh/kWp/yr';
+  document.getElementById('badge-source').textContent = t('source.' + stats.yieldSource);
   document.getElementById('point-count').textContent  = t('header.pointsLoaded', { n: data.length });
 
   renderCharts(stats);
@@ -1001,7 +1088,11 @@ function buildInitialPrompt(stats) {
     `SLOPE RANGE: ${slopes.length ? Math.min(...slopes).toFixed(1) + '° – ' + Math.max(...slopes).toFixed(1) + '°' : 'N/A'}\n` +
     `AVERAGE AZIMUTH (circular mean): ${stats.avgAz != null ? stats.avgAz.toFixed(1) : 'N/A'}°\n` +
     `ELEVATION RANGE: ${elevations.length ? Math.min(...elevations).toFixed(0) + ' – ' + Math.max(...elevations).toFixed(0) + ' m' : 'N/A'}\n` +
-    `ESTIMATED ANNUAL YIELD (site tool estimate): ${stats.yieldEst} kWh/kWp/yr\n` +
+    `ESTIMATED ANNUAL YIELD AT MEASURED ORIENTATION: ${stats.yieldEst} kWh/kWp/yr\n` +
+    `ESTIMATED ANNUAL YIELD AT OPTIMAL ORIENTATION (${stats.optTilt.toFixed(0)}° tilt): ${stats.optimalYield} kWh/kWp/yr\n` +
+    (stats.ghiAnnual != null
+      ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (NASA POWER 2001–2020 climatology; yield via isotropic-sky transposition, 14% system losses, temperature derating)\n`
+      : `YIELD SOURCE: rough latitude-based estimate (satellite data unavailable)\n`) +
     `SUGGESTED ROW COUNT (site tool estimate): ${stats.rows ?? 'N/A'}\n\n` +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');

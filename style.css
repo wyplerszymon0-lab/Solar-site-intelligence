@@ -895,3 +895,6 @@ input:focus, select:focus { border-color: var(--accent); }
   .data-table { font-size: 9px; }
   .table-note { display: none !important; }
 }
+
+.map-badge-note { font-size: 9px; color: var(--text-dim); }
+.map-badge-note:empty { display: none; }
