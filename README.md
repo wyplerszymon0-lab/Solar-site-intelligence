@@ -86,7 +86,8 @@ There is no server: your key is used only to call `api.anthropic.com` directly f
 The browser fetches the site's monthly climatology from the [NASA POWER](https://power.larc.nasa.gov/) API (global and diffuse horizontal irradiance and air temperature, 2001–2020 means) and computes the yield in [`solar-model.js`](solar-model.js):
 
 1. **Transposition to the panel plane**: isotropic-sky model (Liu & Jordan; Duffie & Beckman, *Solar Engineering of Thermal Processes*, §2.19). The beam factor R_b is integrated over the day of each month's representative date, so any tilt, azimuth and hemisphere use one formula.
-2. **Losses**: 14% system losses (PVGIS's default input), −0.4%/°C above 25 °C cell temperature, with cells assumed 20 °C above the monthly mean air temperature.
+2. **Reflection at the glass**: ASHRAE incidence-angle modifier (b₀ = 0.05) on the beam, integrated over the day, and on sky and ground radiation at their effective incidence angles (Duffie & Beckman eq. 5.4.1–2).
+3. **Losses**: 14% system losses (PVGIS's default input), −0.4%/°C above 25 °C cell temperature, with cells assumed 20 °C above the monthly mean air temperature.
 
 If NASA POWER can't be reached, the app falls back to the old latitude-based estimate and labels it as such.
 
@@ -94,20 +95,26 @@ If NASA POWER can't be reached, the app falls back to the old latitude-based est
 
 [PVGIS 5.3](https://re.jrc.ec.europa.eu/pvg_tools/en/) (European Commission JRC) is the reference tool for PV yield in Europe and Africa. No parameter was fitted to it. The PVGIS API cannot be called from a browser (no CORS), which is why the app uses NASA POWER.
 
-| Site | Tilt / facing | PVGIS kWh/kWp | This model | Previous formula |
-|---|---|---:|---:|---:|
-| Lisbon | 35° S | 1579 | 1580 (+0.1%) | 1589 (+0.7%) |
-| Madrid | 36° S | 1620 | 1583 (−2.2%) | 1564 (−3.4%) |
-| Warsaw | 47° S | 1045 | 1008 (−3.6%) | 1387 (+32.7%) |
-| Oslo | 54° S | 948 | 975 (+2.8%) | 1271 (+34.0%) |
-| Cairo | 27° S | 1819 | 1768 (−2.8%) | 1481 (−18.6%) |
-| Sydney | 30° N | 1557 | 1514 (−2.7%) | 1538 (−1.2%) |
-| Johannesburg | 24° N | 1728 | 1812 (+4.8%) | 1423 (−17.7%) |
-| **Mean absolute error** | | | **2.7%** | **15.5%** |
+| Site | Tilt / facing | PVGIS kWh/kWp | This model | Without reflection losses | Previous formula |
+|---|---|---:|---:|---:|---:|
+| Lisbon | 35° S | 1579 | 1528 (−3.2%) | 1580 (+0.1%) | 1589 (+0.7%) |
+| Madrid | 36° S | 1620 | 1532 (−5.4%) | 1583 (−2.2%) | 1564 (−3.4%) |
+| Warsaw | 47° S | 1045 | 974 (−6.8%) | 1008 (−3.6%) | 1387 (+32.7%) |
+| Oslo | 54° S | 948 | 943 (−0.5%) | 975 (+2.8%) | 1271 (+34.0%) |
+| Cairo | 27° S | 1819 | 1709 (−6.1%) | 1768 (−2.8%) | 1481 (−18.6%) |
+| Sydney | 30° N | 1557 | 1463 (−6.0%) | 1514 (−2.7%) | 1538 (−1.2%) |
+| Johannesburg | 24° N | 1728 | 1752 (+1.4%) | 1812 (+4.8%) | 1423 (−17.7%) |
+| Lisbon | 35° W | 1293 | 1317 (+1.9%) | 1365 (+5.6%) | — |
+| Lisbon | 35° E | 1252 | 1317 (+5.2%) | 1365 (+9.0%) | — |
+| Lisbon | 15° N | 1154 | 1184 (+2.6%) | 1256 (+8.9%) | — |
+| Lisbon | flat | 1372 | 1363 (−0.6%) | 1432 (+4.4%) | — |
+| **Mean absolute error** | | | **3.6%** | 4.3% | 15.5% (7 sites) |
 
 The previous formula only knew latitude and happened to be calibrated around Lisbon; it missed cloudy northern climates and sunny low latitudes by 18–34%.
 
-**Known limits.** The model has no angle-of-incidence reflection losses and no horizon shading, so for orientations far from optimal it runs high: +4.4% flat, +5.6% west, +9.0% east and +8.9% north-facing at 15° in Lisbon. Its optimal tilt comes out 2–4° lower than PVGIS's (e.g. Warsaw 35° vs 39°), though yield is flat near the optimum. NASA POWER's resolution is ~0.5–1°, so coastal and mountain sites mix neighbouring climates.
+Adding glass reflection losses was a trade-off, kept because it is physically correct and PVGIS models it too: it cut the error for east, west, north-facing and flat arrays from 4.4–9.0% to 0.6–5.2%, but moved well-oriented arrays from a mixed ±3% to a consistently low −0.5…−6.8% (mean 4.2%). The remaining low bias for optimal orientations likely comes from differences between NASA POWER's and PVGIS's irradiance data; it was not tuned away.
+
+**Known limits.** No horizon or near-object shading. The optimal tilt comes out 1–3° below PVGIS's (Warsaw 36° vs 39°), though yield is flat near the optimum. NASA POWER's resolution is ~0.5–1°, so coastal and mountain sites mix neighbouring climates.
 
 ## A note on the heuristic estimates
 

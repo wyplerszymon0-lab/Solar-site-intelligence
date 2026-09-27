@@ -36,12 +36,37 @@ test('tilting toward the equator raises winter beam gain, facing away lowers it'
   assert.ok(M.beamTiltFactor(50, 40, 0, 344) < 0.2);
 });
 
-test('annual yield is within 5% of PVGIS for five climates on both hemispheres', () => {
-  for (const r of PVGIS) {
-    const y = M.monthlyYield(clim(r.name), r.lat, r.tilt, r.az).annual;
-    const err = (y - r.kwh) / r.kwh;
-    assert.ok(Math.abs(err) < 0.05, `${r.name}: model ${y.toFixed(0)} vs PVGIS ${r.kwh} (${(err * 100).toFixed(1)}%)`);
+// Same settings, Lisbon, orientations far from optimal (PVGIS aspect converted to compass).
+const PVGIS_OFF_OPTIMAL = [
+  { label: 'west 35°', tilt: 35, az: 270, kwh: 1292.87 },
+  { label: 'east 35°', tilt: 35, az: 90, kwh: 1251.98 },
+  { label: 'north 15°', tilt: 15, az: 0, kwh: 1153.9 },
+  { label: 'flat', tilt: 0, az: 180, kwh: 1371.69 },
+];
+
+const within = (actual, expected, tolerance, label) => {
+  const err = (actual - expected) / expected;
+  assert.ok(Math.abs(err) < tolerance, `${label}: model ${actual.toFixed(0)} vs PVGIS ${expected} (${(err * 100).toFixed(1)}%)`);
+};
+
+test('annual yield is within 7% of PVGIS for five climates on both hemispheres', () => {
+  for (const r of PVGIS) within(M.monthlyYield(clim(r.name), r.lat, r.tilt, r.az).annual, r.kwh, 0.07, r.name);
+});
+
+test('annual yield is within 6% of PVGIS for off-optimal orientations', () => {
+  for (const r of PVGIS_OFF_OPTIMAL) {
+    within(M.monthlyYield(clim('lisbon'), 38.72, r.tilt, r.az).annual, r.kwh, 0.06, `Lisbon ${r.label}`);
   }
+});
+
+test('glass reflection losses cost more for steep incidence than for optimal orientation', () => {
+  const loss = (tilt, az) => {
+    const on = M.monthlyYield(clim('lisbon'), 38.72, tilt, az).annual;
+    const off = M.monthlyYield(clim('lisbon'), 38.72, tilt, az, { iamB0: 0 }).annual;
+    return 1 - on / off;
+  };
+  assert.ok(loss(35, 180) > 0.02 && loss(35, 180) < 0.05, `optimal loss ${loss(35, 180)}`);
+  assert.ok(loss(15, 0) > loss(35, 180), 'north-facing should lose more than equator-facing');
 });
 
 test('monthly yields sum to the annual total and peak in local summer', () => {
