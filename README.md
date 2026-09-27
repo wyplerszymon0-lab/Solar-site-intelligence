@@ -64,6 +64,8 @@ lat,lon,elevation,slope,azimuth
 | `slope` | optional | Terrain slope / panel tilt angle (degrees) |
 | `azimuth` | optional | Panel orientation (degrees, 180° = south, 0°/360° = north) |
 
+Semicolon-separated files with decimal commas (what Excel saves in Polish, German, Portuguese and most other European locales) work too, as do common header variants such as `Latitude`, `lng`, `Altitude`, `Tilt` or `Bearing`. Rows with invalid values are skipped and listed; values with units attached (`145m`) are rejected rather than guessed.
+
 > Ratings and yield estimates are hemisphere-aware: sites north of the equator are scored against a south-facing (180°) optimum, sites south of the equator against a north-facing (0°) optimum.
 
 ## Usage
@@ -117,7 +119,7 @@ Row spacing, shading risk and outlier detection are **rough, client-side approxi
 - **Leaflet.js** + **Leaflet.markercluster** + **Leaflet.heat** — map rendering, clustering, heatmap view
 - **NASA POWER API** — satellite irradiance and temperature climatology (no key needed)
 - **Claude API** (Opus 5 / Sonnet 5 / Haiku 4.5, selectable) — AI site analysis and follow-up chat
-- **`node --test`** — tests for the yield model, including the PVGIS validation above (`node --test` from the repo root)
+- **`node --test`** — tests for the yield model (including the PVGIS validation above) and the CSV parser; run `node --test` from the repo root
 - **GitHub Pages** — hosting
 
 ## Background
