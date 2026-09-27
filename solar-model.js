@@ -5,8 +5,9 @@
 // isotropic-sky model (Liu & Jordan; Duffie & Beckman, "Solar Engineering of
 // Thermal Processes", §2.19). The beam tilt factor R_b is integrated over the
 // day of each month's recommended average date, which handles any tilt,
-// azimuth and hemisphere with one formula. Validated against PVGIS in the
-// README. Works in the browser (window.SolarModel) and in Node (require).
+// azimuth and hemisphere with one formula. Reflection losses at the module
+// glass use the ASHRAE incidence-angle modifier. Validated against PVGIS in
+// the README. Works in the browser (window.SolarModel) and in Node (require).
 
 (function (root) {
   const DEG = Math.PI / 180;
@@ -21,15 +22,30 @@
     tempCoeff: -0.004,       // power change per °C of cell temperature, typical crystalline silicon
     cellTempRise: 20,        // cell above ambient while producing, °C (≈ NOCT behaviour)
     groundAlbedo: 0.2,       // standard ground reflectance; NASA's 1° cell albedo is skewed by nearby sea
+    iamB0: 0.05,             // ASHRAE incidence-angle modifier for glass-covered modules; 0 disables it
   };
 
   function declination(n) {
     return 23.45 * Math.sin(2 * Math.PI * (284 + n) / 365);
   }
 
-  // Ratio of daily beam irradiation on the tilted surface to that on the horizontal.
+  // Share of light that passes the module glass at incidence angle θ (ASHRAE model):
+  // 1 − b0·(1/cos θ − 1). Steep angles reflect more, which matters most for
+  // east/west, north-facing and flat arrays.
+  function incidenceModifier(cosTheta, b0) {
+    if (cosTheta <= 0) return 0;
+    return Math.max(0, 1 - b0 * (1 / cosTheta - 1));
+  }
+
+  // Effective incidence angles of isotropic sky and ground radiation on a surface
+  // tilted by `tilt` degrees (Brandemuehl & Beckman; Duffie & Beckman eq. 5.4.1–5.4.2).
+  const skyIncidenceDeg = (tilt) => 59.7 - 0.1388 * tilt + 0.001497 * tilt * tilt;
+  const groundIncidenceDeg = (tilt) => 90 - 0.5788 * tilt + 0.002693 * tilt * tilt;
+
+  // Ratio of daily beam irradiation on the tilted surface to that on the horizontal,
+  // optionally after glass reflection losses (b0 > 0).
   // tilt in degrees; compassAz in degrees (0 = N, 90 = E, 180 = S).
-  function beamTiltFactor(lat, tilt, compassAz, n) {
+  function beamTiltFactor(lat, tilt, compassAz, n, b0 = 0) {
     const phi = lat * DEG, beta = tilt * DEG;
     const gamma = (compassAz - 180) * DEG; // surface azimuth from south, west positive
     const d = declination(n) * DEG;
@@ -45,7 +61,7 @@
         Math.cos(d) * Math.sin(phi) * Math.sin(beta) * Math.cos(gamma) * Math.cos(omega) +
         Math.cos(d) * Math.sin(beta) * Math.sin(gamma) * Math.sin(omega);
       onHorizontal += cosZ;
-      onPlane += Math.max(0, cosT);
+      onPlane += Math.max(0, cosT) * (b0 > 0 ? incidenceModifier(cosT, b0) : 1);
     }
     return onHorizontal > 0 ? onPlane / onHorizontal : 0;
   }
@@ -55,11 +71,13 @@
   function monthlyYield(climatology, lat, tilt, compassAz, options = {}) {
     const o = { ...DEFAULTS, ...options };
     const cosB = Math.cos(tilt * DEG);
+    const kSky = o.iamB0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), o.iamB0) : 1;
+    const kGround = o.iamB0 > 0 ? incidenceModifier(Math.cos(groundIncidenceDeg(tilt) * DEG), o.iamB0) : 1;
     const months = MEAN_DAY.map((n, m) => {
       const H = climatology.ghi[m];
       const Hd = Math.min(climatology.diffuse[m], H);
-      const Rb = beamTiltFactor(lat, tilt, compassAz, n);
-      const poaDaily = (H - Hd) * Rb + Hd * (1 + cosB) / 2 + H * o.groundAlbedo * (1 - cosB) / 2;
+      const Rb = beamTiltFactor(lat, tilt, compassAz, n, o.iamB0);
+      const poaDaily = (H - Hd) * Rb + Hd * (1 + cosB) / 2 * kSky + H * o.groundAlbedo * (1 - cosB) / 2 * kGround;
       const cellTemp = climatology.temp[m] + o.cellTempRise;
       const tempFactor = 1 + o.tempCoeff * (cellTemp - 25);
       const poa = poaDaily * DAYS_IN_MONTH[m];
