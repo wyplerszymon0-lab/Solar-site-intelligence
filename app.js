@@ -14,7 +14,6 @@ const DEMO_DATA = [
 ];
 
 const CLUSTER_THRESHOLD   = 150;    // switch to marker clustering above this many points
-const SHADING_SCAN_CAP    = 1000;   // skip the O(n²) shading heuristic above this many points
 const TABLE_ROW_CAP       = 500;    // render at most this many rows in the points table
 const PANEL_ROW_HEIGHT_M  = 1.7;    // assumed slant height of a panel row, for row-spacing estimate
 
@@ -328,39 +327,11 @@ function showToast(msg, type = '') {
 })();
 
 // ─── Domain logic ─────────────────────────────────────────
-
-// Northern hemisphere ⇒ panels face true south (180°); southern hemisphere ⇒ true north (0°/360°).
-function optimalAzimuth(lat) {
-  return lat >= 0 ? 180 : 0;
-}
-
-// Circular distance between two compass bearings (handles wrap-around at 0°/360°).
-function azimuthDiff(az, target) {
-  const d = Math.abs(az - target);
-  return Math.min(d, 360 - d);
-}
-
-// Circular mean of compass bearings. An arithmetic mean breaks across north:
-// 350° and 10° average to 180° (due south) instead of 0°, which inverted the
-// result for north-facing sites in the southern hemisphere.
-function circularMeanDeg(bearings) {
-  if (!bearings.length) return null;
-  let x = 0, y = 0;
-  bearings.forEach(b => { x += Math.cos(b * Math.PI / 180); y += Math.sin(b * Math.PI / 180); });
-  if (Math.hypot(x, y) < 1e-9 * bearings.length) return null; // directions cancel out
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
-
-function solarRating(lat, slope, azimuth) {
-  const az = azimuth ?? optimalAzimuth(lat);
-  const sl = slope ?? 0;
-  const azScore = 1 - azimuthDiff(az, optimalAzimuth(lat)) / 90;
-  const slScore = sl >= 10 && sl <= 35 ? 1 : sl < 10 ? sl / 10 : Math.max(0, 1 - (sl - 35) / 30);
-  const score = azScore * 0.6 + slScore * 0.4;
-  if (score > 0.7) return 'good';
-  if (score > 0.4) return 'mid';
-  return 'bad';
-}
+// Survey geometry lives in geometry.js (window.SiteGeometry), with its own tests.
+const {
+  optimalAzimuth, azimuthDiff, circularMeanDeg, solarRating,
+  detectShading, detectOutliers, convexHull, polygonAreaM2,
+} = SiteGeometry;
 
 function estimateYield(lat, avgSlope, avgAzimuth) {
   const optTilt = Math.abs(lat) * 0.9;
@@ -401,53 +372,6 @@ function estimateRowLayout(lat, tiltDeg) {
   const elevRad = minNoonElevation * Math.PI / 180;
   const spacing = PANEL_ROW_HEIGHT_M * (Math.cos(tiltRad) + Math.sin(tiltRad) / Math.tan(elevRad));
   return { spacing, minNoonElevation };
-}
-
-function haversineM(p1, p2) {
-  const R = 6371000;
-  const phi1 = p1.lat * Math.PI / 180, phi2 = p2.lat * Math.PI / 180;
-  const dPhi = (p2.lat - p1.lat) * Math.PI / 180;
-  const dLambda = (p2.lon - p1.lon) * Math.PI / 180;
-  const a = Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-function bearingDeg(p1, p2) {
-  const phi1 = p1.lat * Math.PI / 180, phi2 = p2.lat * Math.PI / 180;
-  const dLambda = (p2.lon - p1.lon) * Math.PI / 180;
-  const y = Math.sin(dLambda) * Math.cos(phi2);
-  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
-
-// Heuristic only: flags a point if a notably higher neighbor sits within
-// 30 m, roughly on the sun side (equatorward). Not a rigorous shading study.
-function detectShading(points, lat) {
-  if (points.length > SHADING_SCAN_CAP) return points.map(() => false);
-  const sunSideAz = optimalAzimuth(lat);
-  const RADIUS_M = 30, MIN_HEIGHT_DIFF = 3;
-  return points.map(p => {
-    if (p.elevation == null) return false;
-    return points.some(q => {
-      if (q === p || q.elevation == null) return false;
-      const dist = haversineM(p, q);
-      if (dist > RADIUS_M || dist < 1) return false;
-      if (q.elevation - p.elevation < MIN_HEIGHT_DIFF) return false;
-      return azimuthDiff(bearingDeg(p, q), sunSideAz) < 45;
-    });
-  });
-}
-
-// Flags points whose elevation sits more than 2 standard deviations from
-// the site mean — likely survey/measurement errors worth double-checking.
-function detectOutliers(points) {
-  const vals = points.map(p => p.elevation).filter(v => v != null);
-  if (vals.length < 4) return points.map(() => false);
-  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-  const variance = vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length;
-  const sd = Math.sqrt(variance);
-  if (sd === 0) return points.map(() => false);
-  return points.map(p => p.elevation != null && Math.abs(p.elevation - mean) > 2 * sd);
 }
 
 // ─── Satellite irradiance (NASA POWER) ─────────────────────
@@ -573,47 +497,6 @@ function computeSiteStats(data) {
     facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
-}
-
-// ─── Site boundary (convex hull) ─────────────────────────
-// Andrew's monotone chain — points are (lon, lat), planar approximation
-// which is accurate enough for site-scale surveys (a few hundred meters).
-
-function convexHull(points) {
-  const pts = points.map(p => [p.lon, p.lat]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  if (pts.length < 3) return pts;
-
-  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-
-  const lower = [];
-  for (const p of pts) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
-    lower.push(p);
-  }
-  const upper = [];
-  for (let i = pts.length - 1; i >= 0; i--) {
-    const p = pts[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
-    upper.push(p);
-  }
-  lower.pop();
-  upper.pop();
-  return lower.concat(upper);
-}
-
-// Shoelace formula on a local equirectangular projection (meters), centered on the site.
-function polygonAreaM2(hullLonLat, centerLat) {
-  if (hullLonLat.length < 3) return 0;
-  const mPerDegLat = 111000;
-  const mPerDegLon = 111000 * Math.cos(centerLat * Math.PI / 180);
-  const xy = hullLonLat.map(([lon, lat]) => [lon * mPerDegLon, lat * mPerDegLat]);
-  let sum = 0;
-  for (let i = 0; i < xy.length; i++) {
-    const [x1, y1] = xy[i];
-    const [x2, y2] = xy[(i + 1) % xy.length];
-    sum += x1 * y2 - x2 * y1;
-  }
-  return Math.abs(sum) / 2;
 }
 
 // ─── Charts (inline SVG, numeric data only — no user text is interpolated) ─
