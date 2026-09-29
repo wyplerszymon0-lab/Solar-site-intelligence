@@ -82,3 +82,15 @@ test('parsePowerClimatology rejects fill values', () => {
   const bad = { properties: { parameter: { ALLSKY_SFC_SW_DWN: { JAN: -999 }, ALLSKY_SFC_SW_DIFF: {}, T2M: {} } } };
   assert.throws(() => M.parsePowerClimatology(bad), /incomplete/);
 });
+
+test('tilt curve peaks at the optimum and matches monthlyYield point by point', () => {
+  const c = clim('warsaw');
+  const curve = M.tiltCurve(c, 52.23, 180, 60);
+  assert.equal(curve.length, 61);
+  const best = curve.indexOf(Math.max(...curve));
+  assert.ok(best > 25 && best < 50, `optimum at ${best}°`);
+  // Rises to the optimum and falls after it: a single peak.
+  for (let i = 1; i <= best; i++) assert.ok(curve[i] >= curve[i - 1] - 1e-9, `not rising at ${i}°`);
+  for (let i = best + 1; i < curve.length; i++) assert.ok(curve[i] <= curve[i - 1] + 1e-9, `not falling at ${i}°`);
+  assert.ok(Math.abs(curve[20] - M.monthlyYield(c, 52.23, 20, 180).annual) < 1e-9);
+});
