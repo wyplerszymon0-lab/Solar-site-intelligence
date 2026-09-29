@@ -71,6 +71,10 @@ const I18N = {
     'charts.slope': 'Slope per Point °',
     'charts.azimuth': 'Azimuth vs Optimal',
     'charts.seasonal': 'Est. Monthly Yield',
+    'charts.tilt': 'Annual Yield vs Tilt (equator-facing)',
+    'charts.tiltOptimum': 'optimum',
+    'charts.tiltSurveyed': 'surveyed',
+    'charts.tiltNeedsSatellite': 'Needs satellite irradiance data',
     'charts.empty': 'Not enough data',
     'charts.compassAvg': 'Avg azimuth',
     'charts.compassOptimal': 'Optimal',
@@ -172,6 +176,10 @@ const I18N = {
     'charts.slope': 'Nachylenie wg punktu °',
     'charts.azimuth': 'Azymut vs optymalny',
     'charts.seasonal': 'Szac. wydajność miesięczna',
+    'charts.tilt': 'Roczna wydajność vs kąt (w stronę równika)',
+    'charts.tiltOptimum': 'optimum',
+    'charts.tiltSurveyed': 'pomiar',
+    'charts.tiltNeedsSatellite': 'Wymaga danych satelitarnych',
     'charts.empty': 'Za mało danych',
     'charts.compassAvg': 'Śr. azymut',
     'charts.compassOptimal': 'Optymalny',
@@ -416,14 +424,11 @@ async function ensureClimatology(lat, lon, onReady) {
 }
 
 // Tilt (whole degrees, equator-facing) that maximises annual yield in this climate.
+// Also returns the whole curve (annual yield per degree of tilt) for the tilt chart.
 function optimalTiltFor(clim, lat) {
-  const az = optimalAzimuth(lat);
-  let best = { tilt: 0, yield: -Infinity };
-  for (let tilt = 0; tilt <= 75; tilt++) {
-    const y = SolarModel.monthlyYield(clim, lat, tilt, az).annual;
-    if (y > best.yield) best = { tilt, yield: y };
-  }
-  return best;
+  const curve = SolarModel.tiltCurve(clim, lat, optimalAzimuth(lat));
+  const tilt = curve.indexOf(Math.max(...curve));
+  return { tilt, yield: curve[tilt], curve };
 }
 
 // Single source of truth for every derived number shown in the UI, and
@@ -450,11 +455,12 @@ function computeSiteStats(data) {
 
   // Yield: from satellite irradiance when available, otherwise the old rough formula.
   const clim = climatologyCache.get(climatologyKey(centerLat, centerLon));
-  let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null;
+  let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null;
   if (clim && typeof clim === 'object') {
     const opt = optimalTiltFor(clim, centerLat);
     optTilt = opt.tilt;
     optimalYield = opt.yield;
+    tiltCurve = opt.curve.slice(0, 61).map(Math.round); // chart shows 0–60°
     const site = SolarModel.monthlyYield(clim, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz);
     yieldEst = Math.round(site.annual);
     seasonal = site.monthly.map(Math.round);
@@ -493,7 +499,7 @@ function computeSiteStats(data) {
 
   return {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
-    yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual,
+    yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
     facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
@@ -591,6 +597,36 @@ function chartSeasonalBars(values) {
   return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}">${bars}</svg>`;
 }
 
+// Annual yield vs tilt for equator-facing panels, marking the optimum and the
+// surveyed tilt. Needs satellite data; the rough fallback has no tilt model.
+function chartTiltCurve(curve, optTilt, surveyedTilt) {
+  if (!curve) return `<div class="chart-empty">${t('charts.tiltNeedsSatellite')}</div>`;
+  const w = 260, h = 84, padL = 6, padR = 6, padT = 14, padB = 16;
+  const max = Math.max(...curve), min = Math.min(...curve);
+  const range = (max - min) || 1;
+  const x = (tilt) => padL + (tilt / (curve.length - 1)) * (w - padL - padR);
+  const y = (v) => padT + (1 - (v - min) / range) * (h - padT - padB);
+  const pts = curve.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const ticks = [0, 15, 30, 45, 60].map(tl =>
+    `<text x="${x(tl).toFixed(1)}" y="${h - 3}" font-size="7" fill="#6b7478" text-anchor="middle">${tl}°</text>`).join('');
+  const clamp = (tl) => Math.max(0, Math.min(curve.length - 1, Math.round(tl)));
+  const optX = x(clamp(optTilt)), optY = y(curve[clamp(optTilt)]);
+  let surveyed = '';
+  if (surveyedTilt != null) {
+    const st = clamp(surveyedTilt);
+    const pct = Math.round(curve[st] / max * 100);
+    const anchor = x(st) > w - 60 ? 'end' : 'start';
+    surveyed = `<line x1="${x(st).toFixed(1)}" y1="${padT}" x2="${x(st).toFixed(1)}" y2="${h - padB}" stroke="#f0c040" stroke-width="1" stroke-dasharray="2 2"/>` +
+      `<text x="${(x(st) + (anchor === 'end' ? -3 : 3)).toFixed(1)}" y="${h - padB - 3}" font-size="7" fill="#f0c040" text-anchor="${anchor}">${t('charts.tiltSurveyed')} ${st}° · ${pct}%</text>`;
+  }
+  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}">` +
+    `<polyline points="${pts}" fill="none" stroke="#e8eaeb" stroke-width="1.5"/>` +
+    surveyed +
+    `<circle cx="${optX.toFixed(1)}" cy="${optY.toFixed(1)}" r="2.5" fill="#3ddc84"/>` +
+    `<text x="${optX.toFixed(1)}" y="${(optY - 5).toFixed(1)}" font-size="7" fill="#3ddc84" text-anchor="middle">${t('charts.tiltOptimum')} ${clamp(optTilt)}° · ${Math.round(max).toLocaleString()} kWh/kWp</text>` +
+    ticks + `</svg>`;
+}
+
 function renderCharts(stats) {
   document.getElementById('chart-rating').innerHTML = chartRatingBar(stats.counts);
   document.getElementById('chart-elevation').innerHTML = chartLineProfile(currentData.map(p => p.elevation).filter(v => v != null));
@@ -600,6 +636,7 @@ function renderCharts(stats) {
   );
   document.getElementById('chart-compass').innerHTML = chartCompass(stats.avgAz, stats.facingAz);
   document.getElementById('chart-seasonal').innerHTML = chartSeasonalBars(stats.seasonal);
+  document.getElementById('chart-tilt').innerHTML = chartTiltCurve(stats.tiltCurve, stats.optTilt, stats.avgSlope);
 }
 
 // CSV parsing lives in csv.js (window.SurveyCSV), with its own tests.

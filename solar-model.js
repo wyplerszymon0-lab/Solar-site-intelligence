@@ -91,6 +91,16 @@
     };
   }
 
+  // Annual yield for every whole-degree tilt from 0 to maxTilt at a fixed azimuth.
+  // Index i is the yield at i degrees.
+  function tiltCurve(climatology, lat, compassAz, maxTilt = 75, options = {}) {
+    const curve = [];
+    for (let tilt = 0; tilt <= maxTilt; tilt++) {
+      curve.push(monthlyYield(climatology, lat, tilt, compassAz, options).annual);
+    }
+    return curve;
+  }
+
   // Parse the NASA POWER climatology JSON into the monthly arrays above.
   function parsePowerClimatology(json) {
     const p = json?.properties?.parameter;
@@ -107,7 +117,7 @@
       `&latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&format=JSON`;
   }
 
-  const api = { beamTiltFactor, monthlyYield, parsePowerClimatology, powerClimatologyUrl, DEFAULTS };
+  const api = { beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl, DEFAULTS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;
 })(typeof window !== 'undefined' ? window : globalThis);
