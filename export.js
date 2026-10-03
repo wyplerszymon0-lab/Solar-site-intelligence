@@ -37,6 +37,7 @@
           yield_annual_kwh_per_kwp: stats.yieldEst,
           yield_monthly_kwh_per_kwp: stats.seasonal.slice(),
           yield_source: yieldSourceId(stats.yieldSource),
+          system_loss_pct: stats.systemLossPct,
         },
       });
     }

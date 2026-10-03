@@ -94,3 +94,26 @@ test('tilt curve peaks at the optimum and matches monthlyYield point by point', 
   for (let i = best + 1; i < curve.length; i++) assert.ok(curve[i] <= curve[i - 1] + 1e-9, `not falling at ${i}°`);
   assert.ok(Math.abs(curve[20] - M.monthlyYield(c, 52.23, 20, 180).annual) < 1e-9);
 });
+
+test('yield scales with (1 - system losses); the default matches PVGIS input', () => {
+  const c = clim('lisbon');
+  const at = (systemLoss) => M.monthlyYield(c, 38.72, 35, 180, { systemLoss }).annual;
+  assert.equal(M.DEFAULTS.systemLoss, 0.14);
+  assert.ok(Math.abs(at(0.08) / at(0.20) - 0.92 / 0.80) < 1e-12);
+  assert.equal(M.monthlyYield(c, 38.72, 35, 180).annual, at(0.14));
+  // Optimal tilt does not depend on losses (they scale every tilt equally).
+  const peak = (curve) => curve.indexOf(Math.max(...curve));
+  assert.equal(peak(M.tiltCurve(c, 38.72, 180, 75, { systemLoss: 0.08 })), peak(M.tiltCurve(c, 38.72, 180)));
+});
+
+test('systemLossFraction parses user input in percent', () => {
+  assert.equal(M.systemLossFraction('14'), 0.14);
+  assert.equal(M.systemLossFraction(9.5), 0.095);
+  assert.equal(M.systemLossFraction('12,5'), 0.125);   // decimal comma
+  assert.equal(M.systemLossFraction('0'), 0);
+  assert.equal(M.systemLossFraction('-3'), 0);        // clamped
+  assert.equal(M.systemLossFraction('95'), M.SYSTEM_LOSS_MAX_PCT / 100);
+  for (const bad of ['', 'abc', null, undefined, NaN]) {
+    assert.equal(M.systemLossFraction(bad), M.DEFAULTS.systemLoss, String(bad));
+  }
+});

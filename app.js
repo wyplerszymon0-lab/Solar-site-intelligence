@@ -21,6 +21,7 @@ const API_KEY_STORAGE     = 'solarSite.apiKey';
 const LANG_STORAGE        = 'solarSite.lang';
 const HISTORY_STORAGE     = 'solarSite.history';
 const LAST_SESSION_STORAGE = 'solarSite.lastSession';
+const SYSTEM_LOSS_STORAGE = 'solarSite.systemLossPct';
 const HISTORY_LIMIT       = 15;
 
 const SECTION_HEADERS = {
@@ -39,6 +40,8 @@ const I18N = {
     'cfg.remember': 'Remember on this device (stored only in this browser)',
     'cfg.keyNote': 'Sent directly from your browser to api.anthropic.com — never touches a backend. Only use a key on devices you trust.',
     'cfg.model': 'AI MODEL',
+    'cfg.systemLoss': 'SYSTEM LOSSES (%)',
+    'cfg.systemLossNote': 'Wiring, inverter, soiling and mismatch. Typical installations: 8–20%. 14% is the PVGIS default.',
     'model.opus': 'Opus 5 — highest quality, slower',
     'model.sonnet': 'Sonnet 5 — balanced (recommended)',
     'model.haiku': 'Haiku 4.5 — fastest, cheapest',
@@ -146,6 +149,8 @@ const I18N = {
     'cfg.remember': 'Zapamiętaj na tym urządzeniu (zapisywane tylko w tej przeglądarce)',
     'cfg.keyNote': 'Wysyłany bezpośrednio z Twojej przeglądarki do api.anthropic.com — nigdy nie trafia na żaden backend. Używaj klucza tylko na zaufanych urządzeniach.',
     'cfg.model': 'MODEL AI',
+    'cfg.systemLoss': 'STRATY SYSTEMU (%)',
+    'cfg.systemLossNote': 'Okablowanie, falownik, zabrudzenie i niedopasowanie modułów. Typowo 8–20%. 14% to wartość domyślna PVGIS.',
     'model.opus': 'Opus 5 — najwyższa jakość, wolniejszy',
     'model.sonnet': 'Sonnet 5 — zbalansowany (zalecany)',
     'model.haiku': 'Haiku 4.5 — najszybszy, najtańszy',
@@ -338,6 +343,27 @@ function showToast(msg, type = '') {
   });
 })();
 
+// ─── System losses (user setting, remembered in this browser) ───
+
+function currentSystemLoss() {
+  return SolarModel.systemLossFraction(document.getElementById('system-loss').value);
+}
+
+(function initSystemLoss() {
+  const input = document.getElementById('system-loss');
+  try {
+    const saved = localStorage.getItem(SYSTEM_LOSS_STORAGE);
+    if (saved != null) input.value = Math.round(SolarModel.systemLossFraction(saved) * 1000) / 10;
+  } catch { /* ignore */ }
+
+  input.addEventListener('change', () => {
+    const pct = Math.round(currentSystemLoss() * 1000) / 10;
+    input.value = pct; // show the value actually used (clamped, or the default)
+    try { localStorage.setItem(SYSTEM_LOSS_STORAGE, String(pct)); } catch { /* ignore */ }
+    if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
+  });
+})();
+
 // ─── Domain logic ─────────────────────────────────────────
 // Survey geometry lives in geometry.js (window.SiteGeometry), with its own tests.
 const {
@@ -429,8 +455,8 @@ async function ensureClimatology(lat, lon, onReady) {
 
 // Tilt (whole degrees, equator-facing) that maximises annual yield in this climate.
 // Also returns the whole curve (annual yield per degree of tilt) for the tilt chart.
-function optimalTiltFor(clim, lat) {
-  const curve = SolarModel.tiltCurve(clim, lat, optimalAzimuth(lat));
+function optimalTiltFor(clim, lat, options) {
+  const curve = SolarModel.tiltCurve(clim, lat, optimalAzimuth(lat), 75, options);
   const tilt = curve.indexOf(Math.max(...curve));
   return { tilt, yield: curve[tilt], curve };
 }
@@ -458,22 +484,26 @@ function computeSiteStats(data) {
   const facing    = facingAz === 180 ? 'S' : 'N';
 
   // Yield: from satellite irradiance when available, otherwise the old rough formula.
+  const systemLoss = currentSystemLoss();
+  const modelOptions = { systemLoss };
   const clim = climatologyCache.get(climatologyKey(centerLat, centerLon));
   let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null;
   if (clim && typeof clim === 'object') {
-    const opt = optimalTiltFor(clim, centerLat);
+    const opt = optimalTiltFor(clim, centerLat, modelOptions);
     optTilt = opt.tilt;
     optimalYield = opt.yield;
     tiltCurve = opt.curve.slice(0, 61).map(Math.round); // chart shows 0–60°
-    const site = SolarModel.monthlyYield(clim, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz);
+    const site = SolarModel.monthlyYield(clim, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz, modelOptions);
     yieldEst = Math.round(site.annual);
     seasonal = site.monthly.map(Math.round);
     ghiAnnual = Math.round(clim.ghi.reduce((s, v, m) => s + v * [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m], 0));
     yieldSource = 'satellite';
   } else {
     optTilt = Math.abs(centerLat) * 0.9;
-    yieldEst = estimateYield(centerLat, avgSlope, avgAz);
-    optimalYield = estimateYield(centerLat, optTilt, facingAz);
+    // The rough formula was calibrated at the default losses; scale it to the user's setting.
+    const lossScale = (1 - systemLoss) / (1 - SolarModel.DEFAULTS.systemLoss);
+    yieldEst = Math.round(estimateYield(centerLat, avgSlope, avgAz) * lossScale);
+    optimalYield = estimateYield(centerLat, optTilt, facingAz) * lossScale;
     seasonal = seasonalYieldFactors(centerLat, optTilt).map(f => Math.round(f * yieldEst));
     yieldSource = clim === 'error' ? 'heuristic' : 'loading';
   }
@@ -504,6 +534,7 @@ function computeSiteStats(data) {
   return {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
+    systemLossPct: Math.round(systemLoss * 1000) / 10,
     facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
@@ -929,8 +960,9 @@ function buildInitialPrompt(stats) {
     `ESTIMATED ANNUAL YIELD AT MEASURED ORIENTATION: ${stats.yieldEst} kWh/kWp/yr\n` +
     `ESTIMATED ANNUAL YIELD AT OPTIMAL ORIENTATION (${stats.optTilt.toFixed(0)}° tilt): ${stats.optimalYield} kWh/kWp/yr\n` +
     (stats.ghiAnnual != null
-      ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (NASA POWER 2001–2020 climatology; yield via isotropic-sky transposition, 14% system losses, temperature derating)\n`
+      ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (NASA POWER 2001–2020 climatology; yield via isotropic-sky transposition, ${stats.systemLossPct}% system losses, temperature derating)\n`
       : `YIELD SOURCE: rough latitude-based estimate (satellite data unavailable)\n`) +
+    `SYSTEM LOSSES (user setting: wiring, inverter, soiling, mismatch): ${stats.systemLossPct}%\n` +
     `SUGGESTED ROW COUNT (site tool estimate): ${stats.rows ?? 'N/A'}\n\n` +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');
@@ -1162,7 +1194,7 @@ document.getElementById('export-pdf-btn').addEventListener('click', () => {
   if (!currentData.length) return;
   const stats = computeSiteStats(currentData);
   document.getElementById('print-meta').textContent =
-    `${new Date().toLocaleString()} · ${currentData.length} pts · ${stats.optTilt.toFixed(0)}° tilt, facing ${stats.facing === 'S' ? 'South' : 'North'} · ${stats.yieldEst.toLocaleString()} kWh/kWp/yr`;
+    `${new Date().toLocaleString()} · ${currentData.length} pts · ${stats.optTilt.toFixed(0)}° tilt, facing ${stats.facing === 'S' ? 'South' : 'North'} · ${stats.yieldEst.toLocaleString()} kWh/kWp/yr · ${stats.systemLossPct}% system losses`;
   document.getElementById('print-monthly').innerHTML = SiteExport.monthlyYieldTableHTML(
     stats.seasonal,
     t('print.months').split(','),

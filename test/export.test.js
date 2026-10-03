@@ -20,6 +20,7 @@ const stats = (overrides = {}) => ({
   yieldEst: 1414,
   seasonal: MONTHLY,
   yieldSource: 'satellite',
+  systemLossPct: 14,
   ...overrides,
 });
 
@@ -32,6 +33,7 @@ test('site boundary carries annual and monthly yield with its source', () => {
     yield_annual_kwh_per_kwp: 1414,
     yield_monthly_kwh_per_kwp: MONTHLY,
     yield_source: 'nasa_power',
+    system_loss_pct: 14,
   });
   assert.equal(boundary.properties.yield_monthly_kwh_per_kwp.length, 12);
 });

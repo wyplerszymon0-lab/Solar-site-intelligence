@@ -117,7 +117,20 @@
       `&latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&format=JSON`;
   }
 
-  const api = { beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl, DEFAULTS };
+  // User-entered system losses in percent (input field or localStorage) as a
+  // fraction for monthlyYield. Anything unusable falls back to the default;
+  // values are clamped to 0–40%, beyond which the setting is surely a typo.
+  const SYSTEM_LOSS_MAX_PCT = 40;
+  function systemLossFraction(input) {
+    const pct = typeof input === 'number' ? input : parseFloat(String(input ?? '').replace(',', '.'));
+    if (!Number.isFinite(pct)) return DEFAULTS.systemLoss;
+    return Math.min(Math.max(pct, 0), SYSTEM_LOSS_MAX_PCT) / 100;
+  }
+
+  const api = {
+    beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
+    systemLossFraction, SYSTEM_LOSS_MAX_PCT, DEFAULTS,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;
 })(typeof window !== 'undefined' ? window : globalThis);
