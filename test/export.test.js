@@ -21,6 +21,7 @@ const stats = (overrides = {}) => ({
   seasonal: MONTHLY,
   yieldSource: 'satellite',
   systemLossPct: 14,
+  climFetchedAt: '2026-10-03T08:15:00.000Z',
   ...overrides,
 });
 
@@ -33,6 +34,7 @@ test('site boundary carries annual and monthly yield with its source', () => {
     yield_annual_kwh_per_kwp: 1414,
     yield_monthly_kwh_per_kwp: MONTHLY,
     yield_source: 'nasa_power',
+    yield_data_retrieved: '2026-10-03',
     system_loss_pct: 14,
   });
   assert.equal(boundary.properties.yield_monthly_kwh_per_kwp.length, 12);
@@ -91,4 +93,11 @@ test('print table escapes its labels', () => {
   const html = monthlyYieldTableHTML([1], ['<b>'], 'a & b');
   assert.match(html, /<th>&#60;b&#62;<\/th>/);
   assert.match(html, /<caption>a &#38; b<\/caption>/);
+});
+
+test('retrieval date is exported only for satellite data', () => {
+  const heuristic = buildGeoJSON(data, stats({ yieldSource: 'heuristic' }));
+  assert.equal(heuristic.features.at(-1).properties.yield_data_retrieved, null);
+  const legacy = buildGeoJSON(data, stats({ climFetchedAt: null })); // cached before timestamps
+  assert.equal(legacy.features.at(-1).properties.yield_data_retrieved, null);
 });

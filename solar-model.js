@@ -127,9 +127,20 @@
     return Math.min(Math.max(pct, 0), SYSTEM_LOSS_MAX_PCT) / 100;
   }
 
+  // A cached climatology is reused for CLIMATOLOGY_MAX_AGE_DAYS after it was
+  // fetched (the 20-year means barely move, but NASA revises its datasets).
+  // Entries without a valid fetchedAt — cached before timestamps existed, or
+  // from a clock that was ahead — count as stale and are refetched.
+  const CLIMATOLOGY_MAX_AGE_DAYS = 180;
+  function climatologyIsFresh(entry, nowMs = Date.now()) {
+    if (!entry || typeof entry !== 'object' || typeof entry.fetchedAt !== 'string') return false;
+    const ageMs = nowMs - Date.parse(entry.fetchedAt);
+    return ageMs >= 0 && ageMs < CLIMATOLOGY_MAX_AGE_DAYS * 86400000;
+  }
+
   const api = {
     beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
-    systemLossFraction, SYSTEM_LOSS_MAX_PCT, DEFAULTS,
+    systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;
