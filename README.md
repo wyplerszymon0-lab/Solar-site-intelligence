@@ -87,7 +87,7 @@ The browser fetches the site's monthly climatology from the [NASA POWER](https:/
 
 1. **Transposition to the panel plane**: isotropic-sky model (Liu & Jordan; Duffie & Beckman, *Solar Engineering of Thermal Processes*, §2.19). The beam factor R_b is integrated over the day of each month's representative date, so any tilt, azimuth and hemisphere use one formula.
 2. **Reflection at the glass**: ASHRAE incidence-angle modifier (b₀ = 0.05) on the beam, integrated over the day, and on sky and ground radiation at their effective incidence angles (Duffie & Beckman eq. 5.4.1–2).
-3. **Losses**: 14% system losses (PVGIS's default input), −0.4%/°C above 25 °C cell temperature, with cells assumed 20 °C above the monthly mean air temperature.
+3. **Losses**: system losses set in the Configuration panel (default 14%, PVGIS's default input; remembered in this browser), −0.4%/°C above 25 °C cell temperature, with cells assumed 20 °C above the monthly mean air temperature.
 
 If NASA POWER can't be reached, the app falls back to the old latitude-based estimate and labels it as such.
 
