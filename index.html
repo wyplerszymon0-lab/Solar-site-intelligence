@@ -69,9 +69,9 @@
   <div class="header-meta">
     <span><span class="status-dot"></span><span data-i18n="header.ready">SYSTEM READY</span></span>
     <span id="point-count">0 POINTS LOADED</span>
-    <div class="lang-switch" id="lang-switch">
-      <button type="button" data-lang="en" class="active">EN</button>
-      <button type="button" data-lang="pl">PL</button>
+    <div class="lang-switch" id="lang-switch" role="group" aria-label="Language" data-i18n-aria="aria.language">
+      <button type="button" data-lang="en" class="active" aria-pressed="true">EN</button>
+      <button type="button" data-lang="pl" aria-pressed="false">PL</button>
     </div>
   </div>
 </header>
@@ -85,7 +85,7 @@
     <div class="section">
       <div class="section-label" data-i18n="cfg.label">Configuration</div>
       <div class="input-group">
-        <div class="input-label" data-i18n="cfg.apiKey">ANTHROPIC API KEY</div>
+        <label class="input-label" for="api-key" data-i18n="cfg.apiKey">ANTHROPIC API KEY</label>
         <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off">
         <label class="remember-key">
           <input type="checkbox" id="remember-key">
@@ -97,7 +97,7 @@
         </div>
       </div>
       <div class="input-group">
-        <div class="input-label" data-i18n="cfg.model">AI MODEL</div>
+        <label class="input-label" for="model-select" data-i18n="cfg.model">AI MODEL</label>
         <select id="model-select">
           <option value="claude-opus-5" data-i18n="model.opus">Opus 5 — highest quality, slower</option>
           <option value="claude-sonnet-5" selected data-i18n="model.sonnet">Sonnet 5 — balanced (recommended)</option>
@@ -117,7 +117,7 @@
     <div class="section">
       <div class="section-label" data-i18n="data.label">Data Input</div>
       <div class="upload-zone" id="upload-zone">
-        <input type="file" id="csv-input" accept=".csv">
+        <input type="file" id="csv-input" accept=".csv" aria-label="Upload CSV file" data-i18n-aria="upload.aria">
         <div class="upload-icon">◈</div>
         <div class="upload-text">
           <strong data-i18n="upload.title">Upload CSV File</strong>
@@ -252,9 +252,9 @@
         </div>
       </div>
       <div id="map"></div>
-      <div class="map-view-toggle" id="map-view-toggle" style="display:none">
-        <button type="button" class="active" data-view="markers" data-i18n="map.markers">Markers</button>
-        <button type="button" data-view="heatmap" data-i18n="map.heatmap">Heatmap</button>
+      <div class="map-view-toggle" id="map-view-toggle" style="display:none" role="group" aria-label="Map view" data-i18n-aria="aria.mapView">
+        <button type="button" class="active" data-view="markers" aria-pressed="true" data-i18n="map.markers">Markers</button>
+        <button type="button" data-view="heatmap" aria-pressed="false" data-i18n="map.heatmap">Heatmap</button>
       </div>
       <div class="map-overlay" id="map-overlay" style="display:none">
         <div class="map-badge"><span data-i18n="map.site">SITE:</span> <strong id="badge-site">Portugal PV Site</strong></div>

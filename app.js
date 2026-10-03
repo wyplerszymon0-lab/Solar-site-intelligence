@@ -137,6 +137,19 @@ const I18N = {
     'toast.lastSessionRestored': 'Restored your last session',
     'source.satellite': 'NASA POWER satellite climatology 2001–2020',
     'source.retrieved': 'retrieved {date}',
+    'upload.aria': 'Upload CSV file with survey points',
+    'aria.language': 'Language',
+    'aria.mapView': 'Map view',
+    'aria.marker': 'Point {n}: {rating}',
+    'aria.historyLoad': 'Load saved analysis {name}',
+    'aria.historyDelete': 'Delete saved analysis {name}',
+    'aria.ratingBar': 'Point ratings: {good} good, {mid} moderate, {bad} poor',
+    'aria.elevation': 'Elevation profile of {n} points, from {min} m to {max} m',
+    'aria.slope': 'Slope of each of {n} points, from {min}° to {max}°',
+    'aria.compass': 'Average panel azimuth {avg}, optimal {target}°',
+    'aria.seasonal': 'Estimated monthly yield in kWh/kWp: {values}',
+    'aria.tilt': 'Annual yield by tilt: optimum {opt}° with {max} kWh/kWp',
+    'aria.tiltSurveyed': ', surveyed tilt {st}° reaches {pct}% of it',
     'source.loading': 'Fetching satellite irradiance…',
     'source.heuristic': 'Rough estimate — satellite data unavailable',
     'print.months': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
@@ -247,6 +260,19 @@ const I18N = {
     'toast.lastSessionRestored': 'Przywrócono ostatnią sesję',
     'source.satellite': 'Dane satelitarne NASA POWER 2001–2020',
     'source.retrieved': 'pobrano {date}',
+    'upload.aria': 'Wczytaj plik CSV z punktami pomiarowymi',
+    'aria.language': 'Język',
+    'aria.mapView': 'Widok mapy',
+    'aria.marker': 'Punkt {n}: {rating}',
+    'aria.historyLoad': 'Wczytaj zapisaną analizę {name}',
+    'aria.historyDelete': 'Usuń zapisaną analizę {name}',
+    'aria.ratingBar': 'Oceny punktów: {good} dobrych, {mid} średnich, {bad} słabych',
+    'aria.elevation': 'Profil wysokości {n} punktów, od {min} m do {max} m',
+    'aria.slope': 'Nachylenie każdego z {n} punktów, od {min}° do {max}°',
+    'aria.compass': 'Średni azymut paneli {avg}, optymalny {target}°',
+    'aria.seasonal': 'Szacowany uzysk miesięczny w kWh/kWp: {values}',
+    'aria.tilt': 'Uzysk roczny w zależności od nachylenia: optimum {opt}°, {max} kWh/kWp',
+    'aria.tiltSurveyed': ', zmierzone nachylenie {st}° daje {pct}% tej wartości',
     'source.loading': 'Pobieranie danych satelitarnych…',
     'source.heuristic': 'Przybliżony szacunek — brak danych satelitarnych',
     'print.months': 'Sty,Lut,Mar,Kwi,Maj,Cze,Lip,Sie,Wrz,Paź,Lis,Gru',
@@ -272,8 +298,13 @@ function applyLanguage(lang) {
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
   });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
+  });
   document.querySelectorAll('#lang-switch button').forEach(b => {
-    b.classList.toggle('active', b.dataset.lang === currentLang);
+    const on = b.dataset.lang === currentLang;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
   });
 
   renderHistoryList();
@@ -561,6 +592,13 @@ function computeSiteStats(data) {
 
 // ─── Charts (inline SVG, numeric data only — no user text is interpolated) ─
 
+// Charts are images to assistive technology: role="img" with a sentence that
+// carries the same numbers as the drawing (the SVG's own text is not read).
+function imgRole(label) {
+  const esc = String(label).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  return ` role="img" aria-label="${esc}"`;
+}
+
 function chartRatingBar(counts) {
   const total = counts.good + counts.mid + counts.bad;
   if (!total) return `<div class="chart-empty">${t('charts.empty')}</div>`;
@@ -568,7 +606,7 @@ function chartRatingBar(counts) {
     const pct = counts[key] / total * 100;
     return pct > 0 ? `<div style="flex:${pct.toFixed(2)};background:${color}"></div>` : '';
   };
-  return `<div class="bar-chart">${seg('good', '#3ddc84')}${seg('mid', '#f0c040')}${seg('bad', '#ff5252')}</div>` +
+  return `<div class="bar-chart"${imgRole(t('aria.ratingBar', counts))}>${seg('good', '#3ddc84')}${seg('mid', '#f0c040')}${seg('bad', '#ff5252')}</div>` +
     `<div class="bar-chart-legend">` +
     `<span><i style="background:#3ddc84"></i>${t('rating.good')} ${counts.good}</span>` +
     `<span><i style="background:#f0c040"></i>${t('rating.mid')} ${counts.mid}</span>` +
@@ -587,10 +625,11 @@ function chartLineProfile(values) {
     const y = h - pad - ((v - min) / range) * (h - 2 * pad);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
-  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}">` +
+  const label = t('aria.elevation', { n: values.length, min: min.toFixed(0), max: max.toFixed(0) });
+  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}"${imgRole(label)}>` +
     `<polyline points="${pts}" fill="none" stroke="#f0c040" stroke-width="1.5"/>` +
-    `<text x="${pad}" y="${h - 2}" font-size="8" fill="#6b7478">${min.toFixed(0)}m</text>` +
-    `<text x="${w - pad}" y="${h - 2}" font-size="8" fill="#6b7478" text-anchor="end">${max.toFixed(0)}m</text>` +
+    `<text x="${pad}" y="${h - 2}" font-size="8" fill="#838c90">${min.toFixed(0)}m</text>` +
+    `<text x="${w - pad}" y="${h - 2}" font-size="8" fill="#838c90" text-anchor="end">${max.toFixed(0)}m</text>` +
     `</svg>`;
 }
 
@@ -605,7 +644,8 @@ function chartBars(values, colors) {
     const y = h - pad - bh;
     return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw * 0.7).toFixed(1)}" height="${bh.toFixed(1)}" fill="${colors[i]}"/>`;
   }).join('');
-  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}">${bars}</svg>`;
+  const label = t('aria.slope', { n: values.length, min: Math.min(...values).toFixed(1), max: Math.max(...values).toFixed(1) });
+  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}"${imgRole(label)}>${bars}</svg>`;
 }
 
 function chartCompass(avgAz, targetAz) {
@@ -616,7 +656,7 @@ function chartCompass(avgAz, targetAz) {
   };
   const labels = [['N', 0], ['E', 90], ['S', 180], ['W', 270]].map(([lab, deg]) => {
     const [x, y] = toXY(deg);
-    return `<text x="${x.toFixed(1)}" y="${(y + 3).toFixed(1)}" font-size="8" fill="#6b7478" text-anchor="middle">${lab}</text>`;
+    return `<text x="${x.toFixed(1)}" y="${(y + 3).toFixed(1)}" font-size="8" fill="#838c90" text-anchor="middle">${lab}</text>`;
   }).join('');
   let avgLine = '';
   if (avgAz != null) {
@@ -625,7 +665,8 @@ function chartCompass(avgAz, targetAz) {
   }
   const [tx, ty] = toXY(targetAz);
   const targetLine = `<line x1="${cx}" y1="${cy}" x2="${tx.toFixed(1)}" y2="${ty.toFixed(1)}" stroke="#3ddc84" stroke-width="1.5" stroke-dasharray="3 3"/>`;
-  return `<svg class="site-chart-svg" viewBox="0 0 ${size} ${size}">` +
+  const label = t('aria.compass', { avg: avgAz != null ? `${Math.round(avgAz) % 360}°` : '—', target: targetAz });
+  return `<svg class="site-chart-svg" viewBox="0 0 ${size} ${size}"${imgRole(label)}>` +
     `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1e2529" stroke-width="1"/>` +
     labels + targetLine + avgLine +
     `<circle cx="${cx}" cy="${cy}" r="2" fill="#e8eaeb"/></svg>` +
@@ -646,9 +687,11 @@ function chartSeasonalBars(values) {
     const x = pad + i * bw;
     const y = h - pad - 10 - bh;
     return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw * 0.65).toFixed(1)}" height="${bh.toFixed(1)}" fill="#f0c040"/>` +
-      `<text x="${(x + bw * 0.35).toFixed(1)}" y="${h - 2}" font-size="7" fill="#6b7478" text-anchor="middle">${months[i]}</text>`;
+      `<text x="${(x + bw * 0.35).toFixed(1)}" y="${h - 2}" font-size="7" fill="#838c90" text-anchor="middle">${months[i]}</text>`;
   }).join('');
-  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}">${bars}</svg>`;
+  const names = t('print.months').split(',');
+  const label = t('aria.seasonal', { values: values.map((v, i) => `${names[i]} ${Math.round(v)}`).join(', ') });
+  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}"${imgRole(label)}>${bars}</svg>`;
 }
 
 // Annual yield vs tilt for equator-facing panels, marking the optimum and the
@@ -662,18 +705,20 @@ function chartTiltCurve(curve, optTilt, surveyedTilt) {
   const y = (v) => padT + (1 - (v - min) / range) * (h - padT - padB);
   const pts = curve.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const ticks = [0, 15, 30, 45, 60].map(tl =>
-    `<text x="${x(tl).toFixed(1)}" y="${h - 3}" font-size="7" fill="#6b7478" text-anchor="middle">${tl}°</text>`).join('');
+    `<text x="${x(tl).toFixed(1)}" y="${h - 3}" font-size="7" fill="#838c90" text-anchor="middle">${tl}°</text>`).join('');
   const clamp = (tl) => Math.max(0, Math.min(curve.length - 1, Math.round(tl)));
   const optX = x(clamp(optTilt)), optY = y(curve[clamp(optTilt)]);
   let surveyed = '';
+  let label = t('aria.tilt', { opt: clamp(optTilt), max: Math.round(max) });
   if (surveyedTilt != null) {
     const st = clamp(surveyedTilt);
     const pct = Math.round(curve[st] / max * 100);
+    label += t('aria.tiltSurveyed', { st, pct });
     const anchor = x(st) > w - 60 ? 'end' : 'start';
     surveyed = `<line x1="${x(st).toFixed(1)}" y1="${padT}" x2="${x(st).toFixed(1)}" y2="${h - padB}" stroke="#f0c040" stroke-width="1" stroke-dasharray="2 2"/>` +
       `<text x="${(x(st) + (anchor === 'end' ? -3 : 3)).toFixed(1)}" y="${h - padB - 3}" font-size="7" fill="#f0c040" text-anchor="${anchor}">${t('charts.tiltSurveyed')} ${st}° · ${pct}%</text>`;
   }
-  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}">` +
+  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}"${imgRole(label)}>` +
     `<polyline points="${pts}" fill="none" stroke="#e8eaeb" stroke-width="1.5"/>` +
     surveyed +
     `<circle cx="${optX.toFixed(1)}" cy="${optY.toFixed(1)}" r="2.5" fill="#3ddc84"/>` +
@@ -805,7 +850,9 @@ function renderData(data, opts = {}) {
       popup.appendChild(o);
     }
 
-    const marker = L.marker([pt.lat, pt.lon], { icon }).bindPopup(popup);
+    // title gives the keyboard-focusable marker (role="button") an accessible name.
+    const marker = L.marker([pt.lat, pt.lon], { icon, title: t('aria.marker', { n: i + 1, rating: t('rating.' + rating) }) })
+      .bindPopup(popup);
     markerLayer.addLayer(marker);
     bounds.push([pt.lat, pt.lon]);
   });
@@ -919,7 +966,11 @@ document.getElementById('map-view-toggle').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-view]');
   if (!btn || btn.dataset.view === currentMapView) return;
   currentMapView = btn.dataset.view;
-  document.querySelectorAll('#map-view-toggle button').forEach(b => b.classList.toggle('active', b.dataset.view === currentMapView));
+  document.querySelectorAll('#map-view-toggle button').forEach(b => {
+    const on = b.dataset.view === currentMapView;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
   if (!currentData.length) return;
 
   if (currentMapView === 'heatmap') {
@@ -1294,8 +1345,10 @@ function renderHistoryList() {
     const row = document.createElement('div');
     row.className = 'history-item';
 
-    const main = document.createElement('div');
+    const main = document.createElement('button'); // a button, so it is reachable with Tab and Enter
+    main.type = 'button';
     main.className = 'history-item-main';
+    main.setAttribute('aria-label', t('aria.historyLoad', { name: entry.name }));
     const name = document.createElement('div');
     name.className = 'history-item-name';
     name.textContent = entry.name;
@@ -1311,8 +1364,10 @@ function renderHistoryList() {
 
     const del = document.createElement('button');
     del.className = 'history-item-delete';
+    del.type = 'button';
     del.textContent = '×';
-    del.title = 'Delete';
+    del.title = t('aria.historyDelete', { name: entry.name });
+    del.setAttribute('aria-label', del.title);
     del.addEventListener('click', (e) => {
       e.stopPropagation();
       saveHistoryList(loadHistory().filter(x => x.id !== entry.id));
