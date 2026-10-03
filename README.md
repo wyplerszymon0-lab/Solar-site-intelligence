@@ -36,7 +36,7 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 **Data in & out**
 - **Saved analyses** — name and save analyses locally (`localStorage`) and reload them later from this browser
 - **Auto-restored last session** — reopening the page restores your most recent analysis
-- **Exports** — CSV (with ratings/flags), GeoJSON (points + site boundary polygon), a printable PDF report, and a shareable link that encodes the dataset in the URL (no server involved)
+- **Exports** — CSV (with ratings/flags), GeoJSON (points + a site boundary polygon carrying the annual and 12 monthly yield values and their source, `nasa_power` or `heuristic`), a printable PDF report with the monthly yield table, and a shareable link that encodes the dataset in the URL (no server involved)
 - **Optional local key storage** — the API key can be remembered in this browser only (opt-in, off by default)
 
 **Other**
@@ -126,7 +126,7 @@ Row spacing, shading risk and outlier detection are **rough, client-side approxi
 - **Leaflet.js** + **Leaflet.markercluster** + **Leaflet.heat** — map rendering, clustering, heatmap view
 - **NASA POWER API** — satellite irradiance and temperature climatology (no key needed)
 - **Claude API** (Opus 5 / Sonnet 5 / Haiku 4.5, selectable) — AI site analysis and follow-up chat
-- **`node --test`** — tests for the yield model (including the PVGIS validation above) and the CSV parser; run `node --test` from the repo root
+- **`node --test`** — tests for the yield model (including the PVGIS validation above), the CSV parser, the site geometry and the GeoJSON/print exports; run `node --test` from the repo root
 - **GitHub Pages** — hosting
 
 ## Background
