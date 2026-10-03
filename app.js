@@ -135,6 +135,8 @@ const I18N = {
     'source.satellite': 'NASA POWER satellite climatology 2001–2020',
     'source.loading': 'Fetching satellite irradiance…',
     'source.heuristic': 'Rough estimate — satellite data unavailable',
+    'print.months': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
+    'print.monthly': 'Monthly yield, kWh/kWp ({annual} per year) · {source}',
   },
   pl: {
     'header.ready': 'SYSTEM GOTOWY',
@@ -240,6 +242,8 @@ const I18N = {
     'source.satellite': 'Dane satelitarne NASA POWER 2001–2020',
     'source.loading': 'Pobieranie danych satelitarnych…',
     'source.heuristic': 'Przybliżony szacunek — brak danych satelitarnych',
+    'print.months': 'Sty,Lut,Mar,Kwi,Maj,Cze,Lip,Sie,Wrz,Paź,Lis,Gru',
+    'print.monthly': 'Uzysk miesięczny, kWh/kWp ({annual} rocznie) · {source}',
   },
 };
 
@@ -1149,30 +1153,7 @@ document.getElementById('export-csv-btn').addEventListener('click', () => {
 
 document.getElementById('export-geojson-btn').addEventListener('click', () => {
   if (!currentData.length) return;
-  const stats = computeSiteStats(currentData);
-  const features = currentData.map((pt, i) => ({
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [pt.lon, pt.lat] },
-    properties: {
-      id: i + 1,
-      elevation: pt.elevation,
-      slope: pt.slope,
-      azimuth: pt.azimuth,
-      rating: stats.ratings[i],
-      shading_risk: stats.shadingFlags[i],
-      elevation_outlier: stats.outlierFlags[i],
-    },
-  }));
-  if (stats.hull.length >= 3) {
-    const ring = stats.hull.map(([lon, lat]) => [lon, lat]);
-    ring.push(ring[0]);
-    features.push({
-      type: 'Feature',
-      geometry: { type: 'Polygon', coordinates: [ring] },
-      properties: { name: 'site_boundary', area_m2: stats.area },
-    });
-  }
-  const geojson = { type: 'FeatureCollection', features };
+  const geojson = SiteExport.buildGeoJSON(currentData, computeSiteStats(currentData));
   downloadBlob(new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' }), 'solar-site-analysis.geojson');
   showToast(t('toast.geojsonExported'), 'success');
 });
@@ -1182,6 +1163,11 @@ document.getElementById('export-pdf-btn').addEventListener('click', () => {
   const stats = computeSiteStats(currentData);
   document.getElementById('print-meta').textContent =
     `${new Date().toLocaleString()} · ${currentData.length} pts · ${stats.optTilt.toFixed(0)}° tilt, facing ${stats.facing === 'S' ? 'South' : 'North'} · ${stats.yieldEst.toLocaleString()} kWh/kWp/yr`;
+  document.getElementById('print-monthly').innerHTML = SiteExport.monthlyYieldTableHTML(
+    stats.seasonal,
+    t('print.months').split(','),
+    t('print.monthly', { annual: stats.yieldEst.toLocaleString(), source: t(`source.${stats.yieldSource}`) }),
+  );
   window.print();
 });
 

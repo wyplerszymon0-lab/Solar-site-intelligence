@@ -17,5 +17,5 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: node --check app.js && node --check solar-model.js && node --check csv.js && node --check geometry.js
+      - run: node --check app.js && node --check solar-model.js && node --check csv.js && node --check geometry.js && node --check export.js
       - run: node --test

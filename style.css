@@ -864,6 +864,10 @@ input:focus, select:focus { border-color: var(--accent); }
   .print-only { display: block; margin-bottom: 16px; }
   .print-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; }
   .print-meta { font-size: 11px; color: #444; margin-top: 4px; }
+  .print-monthly-table { margin-top: 10px; border-collapse: collapse; width: 100%; font-size: 10px; }
+  .print-monthly-table caption { text-align: left; font-weight: 600; margin-bottom: 4px; }
+  .print-monthly-table th, .print-monthly-table td { border: 1px solid #ccc; padding: 3px 4px; text-align: right; }
+  .print-monthly-table th { background: #f2f2f2; }
 
   header,
   .lang-switch,
