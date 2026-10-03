@@ -117,3 +117,21 @@ test('systemLossFraction parses user input in percent', () => {
     assert.equal(M.systemLossFraction(bad), M.DEFAULTS.systemLoss, String(bad));
   }
 });
+
+test('cached climatology is fresh for 180 days, then refetched', () => {
+  const now = Date.parse('2026-10-03T12:00:00Z');
+  const daysAgo = (d) => ({ ghi: [], fetchedAt: new Date(now - d * 86400000).toISOString() });
+  assert.equal(M.CLIMATOLOGY_MAX_AGE_DAYS, 180);
+  assert.equal(M.climatologyIsFresh(daysAgo(0), now), true);
+  assert.equal(M.climatologyIsFresh(daysAgo(179.9), now), true);
+  assert.equal(M.climatologyIsFresh(daysAgo(180), now), false);
+  assert.equal(M.climatologyIsFresh(daysAgo(400), now), false);
+});
+
+test('entries without a usable timestamp count as stale', () => {
+  const now = Date.parse('2026-10-03T12:00:00Z');
+  assert.equal(M.climatologyIsFresh({ ghi: [] }, now), false);               // cached before timestamps
+  assert.equal(M.climatologyIsFresh({ fetchedAt: 'yesterday' }, now), false);
+  assert.equal(M.climatologyIsFresh({ fetchedAt: '2026-10-05T00:00:00Z' }, now), false); // clock ahead
+  for (const v of [undefined, null, 'loading', 'error']) assert.equal(M.climatologyIsFresh(v, now), false);
+});

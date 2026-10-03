@@ -136,6 +136,7 @@ const I18N = {
     'toast.shareLong': 'Share link is long — for big datasets, Saved Analyses works better',
     'toast.lastSessionRestored': 'Restored your last session',
     'source.satellite': 'NASA POWER satellite climatology 2001–2020',
+    'source.retrieved': 'retrieved {date}',
     'source.loading': 'Fetching satellite irradiance…',
     'source.heuristic': 'Rough estimate — satellite data unavailable',
     'print.months': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
@@ -245,6 +246,7 @@ const I18N = {
     'toast.shareLong': 'Link jest długi — dla dużych zbiorów lepiej sprawdzi się zapis w Zapisanych analizach',
     'toast.lastSessionRestored': 'Przywrócono ostatnią sesję',
     'source.satellite': 'Dane satelitarne NASA POWER 2001–2020',
+    'source.retrieved': 'pobrano {date}',
     'source.loading': 'Pobieranie danych satelitarnych…',
     'source.heuristic': 'Przybliżony szacunek — brak danych satelitarnych',
     'print.months': 'Sty,Lut,Mar,Kwi,Maj,Cze,Lip,Sie,Wrz,Paź,Lis,Gru',
@@ -436,21 +438,37 @@ function storeClimatology() {
   try { localStorage.setItem(CLIMATOLOGY_STORAGE, JSON.stringify(plain)); } catch { /* ignore */ }
 }
 
-// Fetches the climatology if needed; calls onReady() once it (or a failure) is known.
+const climatologyRefreshing = new Set(); // keys whose stale entry is being refetched
+
+// Fetches the climatology if it is missing or older than CLIMATOLOGY_MAX_AGE_DAYS;
+// calls onReady() once the new data (or a failure) is known. A stale entry stays
+// in use while it is refetched, and is kept if the refetch fails.
 async function ensureClimatology(lat, lon, onReady) {
   const key = climatologyKey(lat, lon);
-  if (climatologyCache.has(key)) return;
-  climatologyCache.set(key, 'loading');
+  const cached = climatologyCache.get(key);
+  if (cached === 'loading' || cached === 'error' || climatologyRefreshing.has(key) ||
+      SolarModel.climatologyIsFresh(cached)) return;
+  const stale = typeof cached === 'object' ? cached : null;
+  if (stale) climatologyRefreshing.add(key);
+  else climatologyCache.set(key, 'loading');
   try {
     const res = await fetch(SolarModel.powerClimatologyUrl(lat, lon));
     if (!res.ok) throw new Error(`NASA POWER HTTP ${res.status}`);
-    climatologyCache.set(key, SolarModel.parsePowerClimatology(await res.json()));
+    const clim = SolarModel.parsePowerClimatology(await res.json());
+    climatologyCache.set(key, { ...clim, fetchedAt: new Date().toISOString() });
     storeClimatology();
   } catch (err) {
-    console.warn('[Solar Site] satellite irradiance unavailable, using rough estimate:', err);
-    climatologyCache.set(key, 'error');
+    console.warn('[Solar Site] satellite irradiance unavailable, using ' + (stale ? 'cached data' : 'rough estimate') + ':', err);
+    if (!stale) climatologyCache.set(key, 'error');
   }
+  climatologyRefreshing.delete(key);
   onReady();
+}
+
+function formatRetrievedDate(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(currentLang === 'pl' ? 'pl-PL' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // Tilt (whole degrees, equator-facing) that maximises annual yield in this climate.
@@ -487,7 +505,7 @@ function computeSiteStats(data) {
   const systemLoss = currentSystemLoss();
   const modelOptions = { systemLoss };
   const clim = climatologyCache.get(climatologyKey(centerLat, centerLon));
-  let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null;
+  let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null, climFetchedAt = null;
   if (clim && typeof clim === 'object') {
     const opt = optimalTiltFor(clim, centerLat, modelOptions);
     optTilt = opt.tilt;
@@ -498,6 +516,7 @@ function computeSiteStats(data) {
     seasonal = site.monthly.map(Math.round);
     ghiAnnual = Math.round(clim.ghi.reduce((s, v, m) => s + v * [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m], 0));
     yieldSource = 'satellite';
+    climFetchedAt = clim.fetchedAt ?? null; // null for entries cached before timestamps existed
   } else {
     optTilt = Math.abs(centerLat) * 0.9;
     // The rough formula was calibrated at the default losses; scale it to the user's setting.
@@ -534,7 +553,7 @@ function computeSiteStats(data) {
   return {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
-    systemLossPct: Math.round(systemLoss * 1000) / 10,
+    systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt,
     facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
@@ -853,8 +872,11 @@ function renderData(data, opts = {}) {
   renderStats(data, stats);
 
   // Fetch satellite irradiance for this site; re-render the numbers when it arrives.
+  // Re-render whatever is shown by then: the same site may have been reloaded as
+  // a new array while the request was in flight, and its later ensureClimatology
+  // call returned early, so this is the only update it gets.
   ensureClimatology(stats.centerLat, stats.centerLon, () => {
-    if (currentData === data) renderStats(data, computeSiteStats(data));
+    if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
   });
 }
 
@@ -883,7 +905,9 @@ function renderStats(data, stats) {
   document.getElementById('badge-tilt').textContent   = stats.optTilt.toFixed(0) + '°';
   document.getElementById('badge-facing').textContent = stats.facing === 'S' ? t('facing.south') : t('facing.north');
   document.getElementById('badge-yield').textContent  = stats.yieldEst.toLocaleString() + ' kWh/kWp/yr';
-  document.getElementById('badge-source').textContent = t('source.' + stats.yieldSource);
+  const retrieved = stats.climFetchedAt && formatRetrievedDate(stats.climFetchedAt);
+  document.getElementById('badge-source').textContent = t('source.' + stats.yieldSource) +
+    (retrieved ? ' · ' + t('source.retrieved', { date: retrieved }) : '');
   document.getElementById('point-count').textContent  = t('header.pointsLoaded', { n: data.length });
 
   renderCharts(stats);

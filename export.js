@@ -37,6 +37,9 @@
           yield_annual_kwh_per_kwp: stats.yieldEst,
           yield_monthly_kwh_per_kwp: stats.seasonal.slice(),
           yield_source: yieldSourceId(stats.yieldSource),
+          // Date the satellite data was fetched (YYYY-MM-DD), null for the heuristic.
+          yield_data_retrieved: stats.yieldSource === 'satellite' && stats.climFetchedAt
+            ? stats.climFetchedAt.slice(0, 10) : null,
           system_loss_pct: stats.systemLossPct,
         },
       });

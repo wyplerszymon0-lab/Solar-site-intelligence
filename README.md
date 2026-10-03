@@ -83,7 +83,7 @@ There is no server: your key is used only to call `api.anthropic.com` directly f
 
 ## Yield model
 
-The browser fetches the site's monthly climatology from the [NASA POWER](https://power.larc.nasa.gov/) API (global and diffuse horizontal irradiance and air temperature, 2001–2020 means) and computes the yield in [`solar-model.js`](solar-model.js):
+The browser fetches the site's monthly climatology from the [NASA POWER](https://power.larc.nasa.gov/) API (global and diffuse horizontal irradiance and air temperature, 2001–2020 means) and computes the yield in [`solar-model.js`](solar-model.js). The climatology is cached in the browser with its retrieval date, which the source badge shows; after 180 days it is fetched again (if that fails, the cached data stays in use):
 
 1. **Transposition to the panel plane**: isotropic-sky model (Liu & Jordan; Duffie & Beckman, *Solar Engineering of Thermal Processes*, §2.19). The beam factor R_b is integrated over the day of each month's representative date, so any tilt, azimuth and hemisphere use one formula.
 2. **Reflection at the glass**: ASHRAE incidence-angle modifier (b₀ = 0.05) on the beam, integrated over the day, and on sky and ground radiation at their effective incidence angles (Duffie & Beckman eq. 5.4.1–2).
