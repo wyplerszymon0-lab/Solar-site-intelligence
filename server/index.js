@@ -25,8 +25,10 @@ if (provider === 'vertex') {
     region: env.VERTEX_REGION || 'global',
   });
 } else if (provider === 'anthropic') {
-  if (!env.ANTHROPIC_API_KEY) throw new Error('AI_PROVIDER=anthropic needs ANTHROPIC_API_KEY');
-  client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
+  // A key pasted into Secret Manager often carries a trailing newline.
+  const apiKey = (env.ANTHROPIC_API_KEY || '').trim();
+  if (!apiKey) throw new Error('AI_PROVIDER=anthropic needs ANTHROPIC_API_KEY');
+  client = new Anthropic({ apiKey });
 } else {
   throw new Error(`unknown AI_PROVIDER "${provider}" (use vertex or anthropic)`);
 }
