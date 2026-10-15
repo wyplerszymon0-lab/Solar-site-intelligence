@@ -153,7 +153,7 @@ test('a failing model stream ends with an error event, not a hung connection', a
 test('GET /status reports the model and the reports left today; OPTIONS answers CORS preflight', async () => {
   await withServer({ streamMessage: fakeStream('x') }, async base => {
     const status = await (await fetch(`${base}/status`)).json();
-    assert.deepEqual(status, { ok: true, model: MODEL, remainingToday: 50 });
+    assert.deepEqual(status, { ok: true, model: MODEL, provider: 'vertex', remainingToday: 50 });
     const pre = await fetch(`${base}/report`, { method: 'OPTIONS', headers: { Origin: ORIGIN } });
     assert.equal(pre.status, 204);
     assert.match(pre.headers.get('access-control-allow-methods'), /POST/);

@@ -147,7 +147,7 @@ const errorBody = message => ({ type: 'error', error: { message } });
  * deps.streamMessage(params) -> async iterable of Messages API stream events, with .abort()
  * deps.dailyCounter -> { take(): {ok, remaining}, remaining(): number }
  */
-export function createHandler({ streamMessage, dailyCounter, ipLimiter, allowedOrigins, log = console }) {
+export function createHandler({ streamMessage, dailyCounter, ipLimiter, allowedOrigins, provider = 'vertex', log = console }) {
   return async function handler(req, res) {
     const cors = corsHeaders(req.headers.origin, allowedOrigins);
     const url = new URL(req.url, 'http://localhost');
@@ -158,7 +158,7 @@ export function createHandler({ streamMessage, dailyCounter, ipLimiter, allowedO
     }
 
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/status')) {
-      return sendJson(res, 200, { ok: true, model: MODEL, remainingToday: await dailyCounter.remaining() }, cors);
+      return sendJson(res, 200, { ok: true, model: MODEL, provider, remainingToday: await dailyCounter.remaining() }, cors);
     }
 
     if (req.method !== 'POST' || url.pathname !== '/report') {
