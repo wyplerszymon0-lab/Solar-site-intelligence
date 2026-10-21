@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- AI report without your own API key: a Node backend on Google Cloud Run (`server/`)
+  owns the prompt, streams Claude Haiku 5.5's answer and enforces 50 reports a day
+  (Firestore), 10 per visitor, request size limits and an origin check; the key is in
+  Secret Manager. One report costs about $0.0011 (#21).
+
 ## [1.0.0] - 2026-10-01
 
 First tagged release.

@@ -29,9 +29,9 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 - **Site charts** — rating distribution, elevation profile, per-point slope, azimuth compass rose, and monthly yield, all inline SVG
 
 **AI analysis**
-- **AI site report** — Claude analyzes your data and returns a structured report (panel configuration, risk factors, recommendations)
+- **AI site report** — Claude analyzes your data and returns a structured report (panel configuration, risk factors, recommendations). **No API key needed:** without one, the report comes from a small backend on Google Cloud Run (Claude Haiku 5.5, limited per day); see [AI backend](#ai-backend-google-cloud-run)
 - **Follow-up chat** — ask follow-up questions about the report in the same conversation
-- **Model picker** — choose Opus 5, Sonnet 5, or Haiku 4.5 depending on quality/speed/cost needs
+- **Model picker** — with your own key, choose Opus 5, Sonnet 5, or Haiku 4.5 depending on quality/speed/cost needs
 
 **Data in & out**
 - **Saved analyses** — name and save analyses locally (`localStorage`) and reload them later from this browser
@@ -71,15 +71,15 @@ Semicolon-separated files with decimal commas (what Excel saves in Polish, Germa
 ## Usage
 
 1. Open the [live demo](https://wyplerszymon0-lab.github.io/Solar-site-intelligence/)
-2. Enter your Anthropic API key (get one at [console.anthropic.com](https://console.anthropic.com))
-3. Upload a CSV file or click **Load Demo Data**
-4. Click **Analyze Site →** to generate the AI report
+2. Upload a CSV file or click **Load Demo Data**
+3. Click **Analyze Site →** to generate the AI report — free, through the demo backend
+4. Optionally enter your own Anthropic API key to pick the model and skip the daily limit
 
-No backend required — runs entirely in the browser.
+Everything except the keyless AI report runs in the browser.
 
 ### A note on the API key
 
-There is no server: your key is used only to call `api.anthropic.com` directly from your own browser tab. That also means you're pasting a real API key into a static webpage — only do this with a key you control, on a device you trust. Check "Remember on this device" only if you want it kept in `localStorage` between visits; leave it unchecked to keep the key session-only.
+With your own key there is no server in between: the key is used only to call `api.anthropic.com` directly from your own browser tab. That also means you're pasting a real API key into a static webpage — only do this with a key you control, on a device you trust. Check "Remember on this device" only if you want it kept in `localStorage` between visits; leave it unchecked to keep the key session-only.
 
 ## Yield model
 
@@ -120,12 +120,30 @@ Adding glass reflection losses was a trade-off, kept because it is physically co
 
 Row spacing, shading risk and outlier detection are **rough, client-side approximations** built from the uploaded lat/lon/elevation/slope/azimuth alone — there's no true 3D shading model and no soil or grid-connection analysis behind them. Treat them as a quick first read, not a substitute for a proper site assessment.
 
+## AI backend (Google Cloud Run)
+
+So that every visitor can see the AI report, the page sends the conversation to a small backend in [`server/`](server/) when no key is entered:
+
+```
+browser (GitHub Pages) ──POST /report──▶ Cloud Run "solar-ai" (Node, europe-central2) ──▶ Claude Haiku 5.5
+                     ◀── same SSE stream ──┘    │ key from Secret Manager, counter in Firestore
+```
+
+- **The server owns the prompt.** The page sends only the language and the conversation; the system prompt and the model are fixed on the server, so the public endpoint is not a free general-purpose chatbot.
+- **Hard limits:** 50 reports a day in total (a Firestore counter, so it holds across instances), 10 per visitor, at most 11 messages and 20 000 characters per request, and only this site's origin (others get 403). Cloud Run scales to zero and to at most 2 instances.
+- **No key in the code or the repository:** the Anthropic key lives in Secret Manager and is mounted into the service; the service account can read that one secret, call nothing else, and write the counter.
+- **Measured cost:** one report is about 450 input and 2 100 output tokens (part of it the model's thinking), **$0.0011**. At the daily cap that is at most about $0.06 a day; prepaid credits without auto-reload are a ceiling on top, and a GCP budget alert watches the project.
+- **Same stream format:** the server forwards the Messages API's server-sent events unchanged, so the page reads one format whether it talks to Anthropic directly or to the backend.
+
+`AI_PROVIDER=vertex` switches the backend to Claude on Vertex AI (billed through GCP, no key at all), which waits on a Vertex quota for this project. Tests: `cd server && node --test` (validation, limits, CORS, streaming and errors against a fake model).
+
 ## Tech Stack
 
 - **Vanilla HTML/CSS/JS** — zero build step
 - **Leaflet.js** + **Leaflet.markercluster** + **Leaflet.heat** — map rendering, clustering, heatmap view
 - **NASA POWER API** — satellite irradiance and temperature climatology (no key needed)
-- **Claude API** (Opus 5 / Sonnet 5 / Haiku 4.5, selectable) — AI site analysis and follow-up chat
+- **Claude API** (Opus 5 / Sonnet 5 / Haiku 4.5 with your key; Haiku 5.5 through the backend) — AI site analysis and follow-up chat
+- **Google Cloud Run + Secret Manager + Firestore** — the keyless AI backend in `server/` (Node, `@anthropic-ai/sdk`)
 - **`node --test`** — tests for the yield model (including the PVGIS validation above), the CSV parser, the site geometry and the GeoJSON/print exports; run `node --test` from the repo root
 - **GitHub Pages** — hosting
 
