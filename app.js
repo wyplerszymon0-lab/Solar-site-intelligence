@@ -18,6 +18,9 @@ const TABLE_ROW_CAP       = 500;    // render at most this many rows in the poin
 const PANEL_ROW_HEIGHT_M  = 1.7;    // assumed slant height of a panel row, for row-spacing estimate
 
 const API_KEY_STORAGE     = 'solarSite.apiKey';
+// Without an API key, reports go through the demo proxy (server/ in this repo, on Cloud Run):
+// Claude Haiku 5.5, a few reports per visitor and a fixed number per day.
+const DEMO_API_URL        = 'https://solar-ai-503894811516.europe-central2.run.app';
 const LANG_STORAGE        = 'solarSite.lang';
 const HISTORY_STORAGE     = 'solarSite.history';
 const LAST_SESSION_STORAGE = 'solarSite.lastSession';
@@ -38,8 +41,8 @@ const I18N = {
     'cfg.label': 'Configuration',
     'cfg.apiKey': 'ANTHROPIC API KEY',
     'cfg.remember': 'Remember on this device (stored only in this browser)',
-    'cfg.keyNote': 'Sent directly from your browser to api.anthropic.com — never touches a backend. Only use a key on devices you trust.',
-    'cfg.model': 'AI MODEL',
+    'cfg.keyNote': 'Optional. Without a key, reports use the free demo: Claude Haiku 5.5 through this project’s server, limited per day. With a key, requests go straight from your browser to api.anthropic.com and never touch a backend; only use a key on devices you trust.',
+    'cfg.model': 'AI MODEL (WITH YOUR KEY)',
     'cfg.systemLoss': 'SYSTEM LOSSES (%)',
     'cfg.systemLossNote': 'Wiring, inverter, soiling and mismatch. Typical installations: 8–20%. 14% is the PVGIS default.',
     'model.opus': 'Opus 5 — highest quality, slower',
@@ -117,7 +120,6 @@ const I18N = {
     'ai.you': 'You',
     'chat.placeholder': 'Ask a follow-up question...',
     'chat.send': 'Send',
-    'toast.noKey': 'Enter your Anthropic API key first',
     'toast.noData': 'No data to analyze',
     'toast.analysisComplete': 'Analysis complete',
     'toast.analysisFailed': 'Analysis failed: ',
@@ -161,8 +163,8 @@ const I18N = {
     'cfg.label': 'Konfiguracja',
     'cfg.apiKey': 'KLUCZ API ANTHROPIC',
     'cfg.remember': 'Zapamiętaj na tym urządzeniu (zapisywane tylko w tej przeglądarce)',
-    'cfg.keyNote': 'Wysyłany bezpośrednio z Twojej przeglądarki do api.anthropic.com — nigdy nie trafia na żaden backend. Używaj klucza tylko na zaufanych urządzeniach.',
-    'cfg.model': 'MODEL AI',
+    'cfg.keyNote': 'Opcjonalny. Bez klucza raporty korzystają z darmowego demo: Claude Haiku 5.5 przez serwer projektu, z dziennym limitem. Z kluczem zapytania idą prosto z Twojej przeglądarki do api.anthropic.com i nie trafiają na żaden backend; używaj klucza tylko na zaufanych urządzeniach.',
+    'cfg.model': 'MODEL AI (Z WŁASNYM KLUCZEM)',
     'cfg.systemLoss': 'STRATY SYSTEMU (%)',
     'cfg.systemLossNote': 'Okablowanie, falownik, zabrudzenie i niedopasowanie modułów. Typowo 8–20%. 14% to wartość domyślna PVGIS.',
     'model.opus': 'Opus 5 — najwyższa jakość, wolniejszy',
@@ -240,7 +242,6 @@ const I18N = {
     'ai.you': 'Ty',
     'chat.placeholder': 'Zadaj dodatkowe pytanie...',
     'chat.send': 'Wyślij',
-    'toast.noKey': 'Wprowadź najpierw swój klucz API Anthropic',
     'toast.noData': 'Brak danych do analizy',
     'toast.analysisComplete': 'Analiza zakończona',
     'toast.analysisFailed': 'Analiza nie powiodła się: ',
@@ -1045,9 +1046,43 @@ function buildInitialPrompt(stats) {
 
 // ─── Analyze (streaming + prompt caching + follow-up chat) ─
 
+// With the visitor's own key: straight from the browser to the Claude API.
+function directRequest(apiKey, model) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+  };
+  const body = {
+    model,
+    // Opus 5 and Sonnet 5 think before answering by default, and thinking tokens
+    // count against max_tokens: the old 1000 could leave no room for the report.
+    max_tokens: 16000,
+    stream: true,
+    system: systemPrompt(),
+    messages: conversation,
+  };
+  if (model === 'claude-opus-5') {
+    // If Opus 5's safety classifiers decline, re-run on Anthropic's recommended model.
+    headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+    body.fallbacks = 'default';
+  }
+  return { url: 'https://api.anthropic.com/v1/messages', headers, body };
+}
+
+// Without a key: the demo proxy picks the model and writes the system prompt itself,
+// and streams back the same events, so the reader below handles both.
+function demoRequest() {
+  return {
+    url: `${DEMO_API_URL}/report`,
+    headers: { 'Content-Type': 'application/json' },
+    body: { lang: currentLang, messages: conversation },
+  };
+}
+
 async function streamMessage(userText, { append }) {
   const apiKey = document.getElementById('api-key').value.trim();
-  if (!apiKey) { showToast(t('toast.noKey'), 'error'); return false; }
   const model = document.getElementById('model-select').value;
 
   conversation.push({ role: 'user', content: userText });
@@ -1077,32 +1112,13 @@ async function streamMessage(userText, { append }) {
   aiBody.appendChild(responseEl);
   aiBody.scrollTop = aiBody.scrollHeight;
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-api-key': apiKey,
-    'anthropic-version': '2023-06-01',
-    'anthropic-dangerous-direct-browser-access': 'true',
-  };
-  const body = {
-    model,
-    // Opus 5 and Sonnet 5 think before answering by default, and thinking tokens
-    // count against max_tokens: the old 1000 could leave no room for the report.
-    max_tokens: 16000,
-    stream: true,
-    system: systemPrompt(),
-    messages: conversation,
-  };
-  if (model === 'claude-opus-5') {
-    // If Opus 5's safety classifiers decline, re-run on Anthropic's recommended model.
-    headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
-    body.fallbacks = 'default';
-  }
+  const request = apiKey ? directRequest(apiKey, model) : demoRequest();
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(request.url, {
       method: 'POST',
-      headers,
-      body: JSON.stringify(body),
+      headers: request.headers,
+      body: JSON.stringify(request.body),
     });
 
     if (!response.ok) {

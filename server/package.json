@@ -1,0 +1,19 @@
+{
+  "name": "solar-ai",
+  "private": true,
+  "description": "Cloud Run proxy that lets demo visitors get the AI site report without their own API key",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@anthropic-ai/vertex-sdk": "^0.21.0",
+    "@google-cloud/firestore": "^9.3.1"
+  }
+}

@@ -92,12 +92,13 @@
           <span data-i18n="cfg.remember">Remember on this device (stored only in this browser)</span>
         </label>
         <div class="key-note" data-i18n="cfg.keyNote">
-          Sent directly from your browser to api.anthropic.com — never touches a backend.
-          Only use a key on devices you trust.
+          Optional. Without a key, reports use the free demo: Claude Haiku 5.5 through this
+          project’s server, limited per day. With a key, requests go straight from your browser
+          to api.anthropic.com and never touch a backend; only use a key on devices you trust.
         </div>
       </div>
       <div class="input-group">
-        <label class="input-label" for="model-select" data-i18n="cfg.model">AI MODEL</label>
+        <label class="input-label" for="model-select" data-i18n="cfg.model">AI MODEL (WITH YOUR KEY)</label>
         <select id="model-select">
           <option value="claude-opus-5" data-i18n="model.opus">Opus 5 — highest quality, slower</option>
           <option value="claude-sonnet-5" selected data-i18n="model.sonnet">Sonnet 5 — balanced (recommended)</option>
