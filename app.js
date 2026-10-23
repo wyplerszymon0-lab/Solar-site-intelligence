@@ -23,7 +23,7 @@ const API_KEY_STORAGE     = 'solarSite.apiKey';
 const DEMO_API_URL        = 'https://solar-ai-503894811516.europe-central2.run.app';
 const LANG_STORAGE        = 'solarSite.lang';
 const HISTORY_STORAGE     = 'solarSite.history';
-const LAST_SESSION_STORAGE = 'solarSite.lastSession';
+const LAST_SESSION_STORAGE = SiteSession.LAST_SESSION_KEY;  // session.js decides what Clear forgets
 const SYSTEM_LOSS_STORAGE = 'solarSite.systemLossPct';
 const HISTORY_LIMIT       = 15;
 
@@ -54,6 +54,7 @@ const I18N = {
     'csv.expected': 'Expected columns:',
     'csv.min': 'lat, lon, elevation (minimum)',
     'demo.btn': '⬡ Load Demo Data (Portugal)',
+    'data.clear': '✕ Clear data',
     'demo.siteLabel': 'Portugal PV Site (Demo)',
     'history.label': 'Saved Analyses (this browser)',
     'history.save': '💾 Save Current Analysis',
@@ -126,6 +127,7 @@ const I18N = {
     'toast.csvLoaded': 'Loaded {n} measurement points',
     'toast.csvError': 'CSV Error: ',
     'toast.demoLoaded': 'Demo data loaded — Lisbon region, Portugal',
+    'toast.cleared': 'Cleared — back to the start screen',
     'toast.csvExported': 'CSV exported',
     'toast.geojsonExported': 'GeoJSON exported',
     'toast.copySuccess': 'Report copied to clipboard',
@@ -176,6 +178,7 @@ const I18N = {
     'csv.expected': 'Oczekiwane kolumny:',
     'csv.min': 'lat, lon, elevation (minimum)',
     'demo.btn': '⬡ Wczytaj dane demo (Portugalia)',
+    'data.clear': '✕ Wyczyść dane',
     'demo.siteLabel': 'Portugalia (dane demo)',
     'history.label': 'Zapisane analizy (ta przeglądarka)',
     'history.save': '💾 Zapisz bieżącą analizę',
@@ -248,6 +251,7 @@ const I18N = {
     'toast.csvLoaded': 'Wczytano {n} punktów pomiarowych',
     'toast.csvError': 'Błąd CSV: ',
     'toast.demoLoaded': 'Wczytano dane demo — region Lizbony, Portugalia',
+    'toast.cleared': 'Wyczyszczono — strona wróciła do stanu początkowego',
     'toast.csvExported': 'Wyeksportowano CSV',
     'toast.geojsonExported': 'Wyeksportowano GeoJSON',
     'toast.copySuccess': 'Raport skopiowany do schowka',
@@ -340,6 +344,9 @@ function initMap() {
 }
 
 initMap();
+
+// The AI panel as it is before any data, so Clear can bring the first-visit state back.
+const INITIAL_AI_BODY = document.getElementById('ai-body').innerHTML;
 
 // ─── Toast ────────────────────────────────────────────────
 
@@ -783,6 +790,7 @@ function renderData(data, opts = {}) {
   document.getElementById('export-geojson-btn').style.display = '';
   document.getElementById('export-pdf-btn').style.display = '';
   document.getElementById('share-link-btn').style.display = '';
+  document.getElementById('clear-btn').style.display = '';
 
   if (markerLayer)   { map.removeLayer(markerLayer);   markerLayer = null; }
   if (heatLayer)     { map.removeLayer(heatLayer);     heatLayer = null; }
@@ -1260,6 +1268,38 @@ document.getElementById('demo-btn').addEventListener('click', () => {
   renderData(DEMO_DATA);
   showToast(t('toast.demoLoaded'), 'success');
 });
+
+// Undo what renderData shows: empty map, no statistics or report, and forget the
+// auto-restored dataset so a reload stays empty. Settings and saved analyses stay.
+function clearData() {
+  currentData = [];
+  conversation = [];
+  lastAiText = '';
+  SiteSession.forgetSession(localStorage, location, history);
+
+  if (markerLayer)   { map.removeLayer(markerLayer);   markerLayer = null; }
+  if (heatLayer)     { map.removeLayer(heatLayer);     heatLayer = null; }
+  if (boundaryLayer) { map.removeLayer(boundaryLayer); boundaryLayer = null; }
+  map.setView([38.7223, -9.1393], 2);
+
+  document.getElementById('map-empty').classList.remove('hidden');
+  for (const id of ['map-overlay', 'map-view-toggle', 'stats-section', 'charts-section', 'table-section']) {
+    document.getElementById(id).style.display = 'none';
+  }
+  for (const id of ['export-csv-btn', 'export-geojson-btn', 'export-pdf-btn', 'share-link-btn',
+                    'copy-report-btn', 'ai-followup', 'clear-btn']) {
+    document.getElementById(id).style.display = 'none';
+  }
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('save-history-btn').disabled = true;
+  document.getElementById('csv-input').value = '';
+  document.getElementById('point-count').textContent = t('header.pointsLoaded', { n: 0 });
+  document.getElementById('ai-body').innerHTML = INITIAL_AI_BODY;
+  applyLanguage(currentLang);  // translates the restored placeholder text
+  showToast(t('toast.cleared'), 'success');
+}
+
+document.getElementById('clear-btn').addEventListener('click', clearData);
 
 // ─── Export: CSV / GeoJSON / PDF / Share link ─────────────
 

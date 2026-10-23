@@ -35,7 +35,7 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 
 **Data in & out**
 - **Saved analyses** — name and save analyses locally (`localStorage`) and reload them later from this browser
-- **Auto-restored last session** — reopening the page restores your most recent analysis
+- **Auto-restored last session** — reopening the page restores your most recent analysis; **Clear data** returns to the empty start screen and forgets it (saved analyses stay)
 - **Exports** — CSV (with ratings/flags), GeoJSON (points + a site boundary polygon carrying the annual and 12 monthly yield values and their source, `nasa_power` or `heuristic`), a printable PDF report with the monthly yield table, and a shareable link that encodes the dataset in the URL (no server involved)
 - **Optional local key storage** — the API key can be remembered in this browser only (opt-in, off by default)
 

@@ -11,6 +11,8 @@ All notable changes to this project are documented here. The format follows
   owns the prompt, streams Claude Haiku 5.5's answer and enforces 50 reports a day
   (Firestore), 10 per visitor, request size limits and an origin check; the key is in
   Secret Manager. One report costs about $0.0011 (#21).
+- **Clear data** button: back to the start screen, and the auto-restored last session is
+  forgotten so a reload stays empty; saved analyses and settings stay (#23).
 
 ## [1.0.0] - 2026-10-01
 
