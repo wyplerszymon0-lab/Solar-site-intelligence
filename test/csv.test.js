@@ -43,6 +43,40 @@ test('invalid rows are reported with their row number and the rest is kept', () 
 test('files that cannot be used at all throw', () => {
   assert.throws(() => parseCSV(''), /header row/);
   assert.throws(() => parseCSV('lat,lon\n'), /header row/);
-  assert.throws(() => parseCSV('x,y\n1,2\n'), /"lat" and "lon"/);
+  assert.throws(() => parseCSV('a,b\n1,2\n'), /"lat" and "lon"/);
+  assert.throws(() => parseCSV('x,y\n1,2\n'), /choose its coordinate system/); // plane coordinates need a system
   assert.throws(() => parseCSV('lat,lon\n999,2\n'), /No valid data rows/);
+});
+
+// Warsaw (52.2297 N, 21.0122 E) in three systems, values from PROJ (test/fixtures/crs-proj.json).
+test('easting/northing columns are converted with the chosen system', () => {
+  const near = (p, lat, lon) => Math.abs(p.lat - lat) < 1e-8 && Math.abs(p.lon - lon) < 1e-8;
+  const utm = parseCSV('easting,northing,elevation\n500833.2431,5786586.6712,100\n', { crs: 'utm:34N' });
+  assert.ok(near(utm.points[0], 52.2297, 21.0122));
+  assert.equal(utm.points[0].elevation, 100);
+  // Semicolons and decimal commas work for plane coordinates too.
+  const e = parseCSV('E;N\n500833,2431;5786586,6712\n', { crs: 'utm:34N' });
+  assert.ok(near(e.points[0], 52.2297, 21.0122));
+});
+
+test('in the Polish grids x is northing and y is easting; elsewhere x is easting', () => {
+  const { getCRS } = require('../crs.js');
+  const { easting, northing } = getCRS('pl2000:7').toProjected(52.2297, 21.0122);
+  const pl = parseCSV(`x,y\n${northing},${easting}\n`, { crs: 'pl2000:7' });
+  assert.ok(Math.abs(pl.points[0].lat - 52.2297) < 1e-8 && Math.abs(pl.points[0].lon - 21.0122) < 1e-8);
+  const utm = parseCSV('x,y\n500833.2431,5786586.6712\n', { crs: 'utm:34N' });
+  assert.ok(Math.abs(utm.points[0].lat - 52.2297) < 1e-8);
+});
+
+test('swapped axes or a wrong zone are row errors that say why', () => {
+  // Easting and northing swapped: 5 786 km east of the central meridian.
+  const { points, rowErrors } = parseCSV(
+    'easting,northing\n500833.2431,5786586.6712\n5786586.6712,500833.2431\n', { crs: 'utm:34N' });
+  assert.equal(points.length, 1);
+  assert.match(rowErrors[0], /^Row 3: easting 5786586\.6712 is 5289 km from the central meridian.*swapped/);
+});
+
+test('lat/lon columns win over a chosen system', () => {
+  const { points } = parseCSV('lat,lon,x,y\n38.7,-9.1,1,2\n', { crs: 'utm:29N' });
+  assert.deepEqual([points[0].lat, points[0].lon], [38.7, -9.1]);
 });

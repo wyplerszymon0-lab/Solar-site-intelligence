@@ -13,6 +13,10 @@ All notable changes to this project are documented here. The format follows
   Secret Manager. One report costs about $0.0011 (#21).
 - **Clear data** button: back to the start screen, and the auto-restored last session is
   forgotten so a reload stays empty; saved analyses and settings stay (#23).
+- **Projected survey coordinates:** CSV files with `easting`/`northing` (or `x`/`y`) in
+  UTM (any zone, north or south), PL-1992, PL-2000 zones 5–8 or PT-TM06 are converted
+  to lat/lon on load (`crs.js`, Krüger series, checked against PROJ to 0.1 mm). A wrong
+  zone or swapped columns is reported instead of plotted (#27).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:

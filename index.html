@@ -117,6 +117,30 @@
     <!-- DATA INPUT -->
     <div class="section">
       <div class="section-label" data-i18n="data.label">Data Input</div>
+      <div class="input-group">
+        <label class="input-label" for="crs-select" data-i18n="crs.label">COORDINATES IN THE FILE</label>
+        <select id="crs-select">
+          <option value="" data-i18n="crs.latlon">Latitude / longitude (WGS84)</option>
+          <option value="utm" data-i18n="crs.utm">UTM, any zone (WGS84)</option>
+          <option value="pl1992" data-i18n="crs.pl1992">Poland PL-1992 (EPSG:2180)</option>
+          <option value="pl2000:5" data-i18n="crs.pl2000z5">Poland PL-2000 zone 5 (EPSG:2176)</option>
+          <option value="pl2000:6" data-i18n="crs.pl2000z6">Poland PL-2000 zone 6 (EPSG:2177)</option>
+          <option value="pl2000:7" data-i18n="crs.pl2000z7">Poland PL-2000 zone 7 (EPSG:2178)</option>
+          <option value="pl2000:8" data-i18n="crs.pl2000z8">Poland PL-2000 zone 8 (EPSG:2179)</option>
+          <option value="pttm06" data-i18n="crs.pttm06">Portugal PT-TM06 (EPSG:3763)</option>
+        </select>
+        <div class="crs-utm" id="crs-utm" hidden>
+          <input type="number" id="utm-zone" min="1" max="60" step="1" value="33" inputmode="numeric"
+                 aria-label="UTM zone (1–60)" data-i18n-aria="crs.zoneAria">
+          <select id="utm-hemisphere" aria-label="Hemisphere" data-i18n-aria="crs.hemisphereAria">
+            <option value="N" data-i18n="crs.north">North</option>
+            <option value="S" data-i18n="crs.south">South</option>
+          </select>
+        </div>
+        <div class="key-note" id="crs-note" data-i18n="crs.note">
+          Plane coordinates: columns easting, northing (or x, y). In the Polish grids x is northing.
+        </div>
+      </div>
       <div class="upload-zone" id="upload-zone">
         <input type="file" id="csv-input" accept=".csv" aria-label="Upload CSV file" data-i18n-aria="upload.aria">
         <div class="upload-icon">◈</div>
@@ -128,7 +152,8 @@
       <div class="csv-format">
         <span data-i18n="csv.expected">Expected columns:</span><br>
         <code>lat, lon, elevation, slope, azimuth</code><br>
-        <code data-i18n="csv.min">lat, lon, elevation (minimum)</code>
+        <code data-i18n="csv.min">lat, lon, elevation (minimum)</code><br>
+        <code data-i18n="csv.plane">or easting, northing instead of lat, lon</code>
       </div>
       <button class="btn btn-ghost" id="demo-btn" style="margin-top:12px" data-i18n="demo.btn">⬡ Load Demo Data (Portugal)</button>
       <button class="btn btn-ghost" id="clear-btn" style="margin-top:8px;display:none" data-i18n="data.clear">✕ Clear data</button>
@@ -297,6 +322,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="solar-model.js"></script>
+<script src="crs.js"></script>
 <script src="csv.js"></script>
 <script src="geometry.js"></script>
 <script src="export.js"></script>

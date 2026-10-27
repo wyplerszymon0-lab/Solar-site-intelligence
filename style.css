@@ -916,3 +916,12 @@ input:focus, select:focus { border-color: var(--accent); }
 
 .map-badge-note { font-size: 9px; color: var(--text-dim); }
 .map-badge-note:empty { display: none; }
+
+/* UTM zone + hemisphere, shown when UTM is picked */
+.crs-utm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.crs-utm[hidden] { display: none; }
