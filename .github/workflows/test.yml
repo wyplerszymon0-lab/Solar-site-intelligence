@@ -18,4 +18,5 @@ jobs:
         with:
           node-version: 22
       - run: node --check app.js && node --check solar-model.js && node --check csv.js && node --check geometry.js && node --check export.js && node --check session.js
+      - run: npm ci --prefix server  # the backend tests load the Anthropic SDK
       - run: node --test
