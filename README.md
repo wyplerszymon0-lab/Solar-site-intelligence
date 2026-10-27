@@ -68,6 +68,26 @@ Semicolon-separated files with decimal commas (what Excel saves in Polish, Germa
 
 > Ratings and yield estimates are hemisphere-aware: sites north of the equator are scored against a south-facing (180°) optimum, sites south of the equator against a north-facing (0°) optimum.
 
+### Projected coordinates (UTM, national grids)
+
+Survey instruments usually export plane coordinates, not lat/lon. Pick the file's system under **Coordinates in the file** and use `easting`/`northing` (or `x`/`y`, `E`/`N`) columns instead of `lat`/`lon`:
+
+| System | Where | EPSG |
+|--------|-------|------|
+| UTM zones 1–60, north or south (WGS84) | anywhere from 80° S to 84° N | 32601–32660, 32701–32760 |
+| PL-1992 | Poland | 2180 |
+| PL-2000 zones 5–8 | Poland | 2176–2179 |
+| PT-TM06 / ETRS89 | Portugal | 3763 |
+
+```csv
+x;y;elevation;slope;azimuth
+5788456,49;7500833,51;100;10;180
+```
+
+In the Polish grids `x` is the northing and `y` the easting (the geodetic convention); in the other systems `x` is the easting. An easting implausibly far from the zone's central meridian (300 km for PL-2000, 1000 km otherwise) is rejected with a hint that the zone is wrong or the columns are swapped, instead of plotting the site somewhere else.
+
+The conversion ([`crs.js`](crs.js)) is the transverse Mercator inverse with the Krüger series to sixth order (Karney 2011), written without a projection library. Tests compare it with PROJ (pyproj) at 21 points on both hemispheres: forward and inverse agree to within 0.1 mm, the rounding of the reference values. Systems that need a datum shift (e.g. the British National Grid on OSGB36) are not supported; ETRS89 and WGS84 are treated as equal, which is within about a metre.
+
 ## Usage
 
 1. Open the [live demo](https://wyplerszymon0-lab.github.io/Solar-site-intelligence/)

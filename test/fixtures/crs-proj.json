@@ -1,0 +1,194 @@
+{
+ "source": "pyproj 3.8.0, PROJ 9.8.1",
+ "cases": [
+  {
+   "crs": "utm:29N",
+   "epsg": 32629,
+   "name": "Lisbon",
+   "lat": 38.7223,
+   "lon": -9.1393,
+   "easting": 487890.7581,
+   "northing": 4285969.8589
+  },
+  {
+   "crs": "utm:34N",
+   "epsg": 32634,
+   "name": "Warsaw",
+   "lat": 52.2297,
+   "lon": 21.0122,
+   "easting": 500833.2431,
+   "northing": 5786586.6712
+  },
+  {
+   "crs": "utm:34N",
+   "epsg": 32634,
+   "name": "Tromso",
+   "lat": 69.6492,
+   "lon": 18.9553,
+   "easting": 420653.5941,
+   "northing": 7728081.2221
+  },
+  {
+   "crs": "utm:56S",
+   "epsg": 32756,
+   "name": "Sydney",
+   "lat": -33.8688,
+   "lon": 151.2093,
+   "easting": 334368.6336,
+   "northing": 6250948.3454
+  },
+  {
+   "crs": "utm:35S",
+   "epsg": 32735,
+   "name": "Johannesburg",
+   "lat": -26.2041,
+   "lon": 28.0473,
+   "easting": 604633.1433,
+   "northing": 7101290.7589
+  },
+  {
+   "crs": "utm:36N",
+   "epsg": 32636,
+   "name": "Cairo",
+   "lat": 30.0444,
+   "lon": 31.2357,
+   "easting": 329899.643,
+   "northing": 3325016.7362
+  },
+  {
+   "crs": "utm:17S",
+   "epsg": 32717,
+   "name": "Quito",
+   "lat": -0.1807,
+   "lon": -78.4678,
+   "easting": 781861.4575,
+   "northing": 9980007.5669
+  },
+  {
+   "crs": "utm:6N",
+   "epsg": 32606,
+   "name": "Anchorage",
+   "lat": 61.2181,
+   "lon": -149.9003,
+   "easting": 344247.2065,
+   "northing": 6790536.8713
+  },
+  {
+   "crs": "utm:13N",
+   "epsg": 32613,
+   "name": "zone edge 3.4 deg off",
+   "lat": 35.0,
+   "lon": -101.6,
+   "easting": 810318.4023,
+   "northing": 3878327.8388
+  },
+  {
+   "crs": "utm:19S",
+   "epsg": 32719,
+   "name": "Atacama",
+   "lat": -24.5,
+   "lon": -69.25,
+   "easting": 474671.3864,
+   "northing": 7290391.7743
+  },
+  {
+   "crs": "utm:43N",
+   "epsg": 32643,
+   "name": "Rajasthan",
+   "lat": 26.9124,
+   "lon": 75.7873,
+   "easting": 578174.0159,
+   "northing": 2976975.9105
+  },
+  {
+   "crs": "pl1992",
+   "epsg": 2180,
+   "name": "Warsaw",
+   "lat": 52.2297,
+   "lon": 21.0122,
+   "easting": 637382.2044,
+   "northing": 486757.2095
+  },
+  {
+   "crs": "pl1992",
+   "epsg": 2180,
+   "name": "Szczecin",
+   "lat": 53.4285,
+   "lon": 14.5528,
+   "easting": 204684.7038,
+   "northing": 627375.0235
+  },
+  {
+   "crs": "pl1992",
+   "epsg": 2180,
+   "name": "Przemysl",
+   "lat": 49.7838,
+   "lon": 22.7678,
+   "easting": 771122.402,
+   "northing": 219749.8196
+  },
+  {
+   "crs": "pl2000:5",
+   "epsg": 2176,
+   "name": "Szczecin",
+   "lat": 53.4285,
+   "lon": 14.5528,
+   "easting": 5470276.7029,
+   "northing": 5921945.4102
+  },
+  {
+   "crs": "pl2000:6",
+   "epsg": 2177,
+   "name": "Wroclaw",
+   "lat": 51.1079,
+   "lon": 17.0385,
+   "easting": 6432667.451,
+   "northing": 5664093.1358
+  },
+  {
+   "crs": "pl2000:7",
+   "epsg": 2178,
+   "name": "Warsaw",
+   "lat": 52.2297,
+   "lon": 21.0122,
+   "easting": 7500833.5124,
+   "northing": 5788456.4865
+  },
+  {
+   "crs": "pl2000:8",
+   "epsg": 2179,
+   "name": "Bialystok",
+   "lat": 53.1325,
+   "lon": 23.1688,
+   "easting": 8444371.3563,
+   "northing": 5889235.3162
+  },
+  {
+   "crs": "pttm06",
+   "epsg": 3763,
+   "name": "Lisbon",
+   "lat": 38.7223,
+   "lon": -9.1393,
+   "easting": -87503.4389,
+   "northing": -104538.8924
+  },
+  {
+   "crs": "pttm06",
+   "epsg": 3763,
+   "name": "Porto",
+   "lat": 41.1579,
+   "lon": -8.6291,
+   "easting": -41630.6734,
+   "northing": 165532.2638
+  },
+  {
+   "crs": "pttm06",
+   "epsg": 3763,
+   "name": "Faro",
+   "lat": 37.0194,
+   "lon": -7.9304,
+   "easting": 18038.833,
+   "northing": -294012.1157
+  }
+ ]
+}

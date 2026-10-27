@@ -25,7 +25,8 @@ const LANG_STORAGE        = 'solarSite.lang';
 const HISTORY_STORAGE     = 'solarSite.history';
 const LAST_SESSION_STORAGE = SiteSession.LAST_SESSION_KEY;  // session.js decides what Clear forgets
 const SYSTEM_LOSS_STORAGE = 'solarSite.systemLossPct';
-const HISTORY_LIMIT       = 15;
+const CRS_STORAGE         = 'solarSite.crs';
+const HISTORY_LIMIT      = 15;
 
 const SECTION_HEADERS = {
   en: ['Site Assessment', 'Optimal Panel Configuration', 'Estimated Energy Yield', 'Risk Factors', 'Recommendations'],
@@ -53,6 +54,21 @@ const I18N = {
     'upload.subtitle': 'Drop geodetic measurement data',
     'csv.expected': 'Expected columns:',
     'csv.min': 'lat, lon, elevation (minimum)',
+    'csv.plane': 'or easting, northing instead of lat, lon',
+    'crs.label': 'COORDINATES IN THE FILE',
+    'crs.latlon': 'Latitude / longitude (WGS84)',
+    'crs.utm': 'UTM, any zone (WGS84)',
+    'crs.pl1992': 'Poland PL-1992 (EPSG:2180)',
+    'crs.pl2000z5': 'Poland PL-2000 zone 5 (EPSG:2176)',
+    'crs.pl2000z6': 'Poland PL-2000 zone 6 (EPSG:2177)',
+    'crs.pl2000z7': 'Poland PL-2000 zone 7 (EPSG:2178)',
+    'crs.pl2000z8': 'Poland PL-2000 zone 8 (EPSG:2179)',
+    'crs.pttm06': 'Portugal PT-TM06 (EPSG:3763)',
+    'crs.zoneAria': 'UTM zone (1–60)',
+    'crs.hemisphereAria': 'Hemisphere',
+    'crs.north': 'North',
+    'crs.south': 'South',
+    'crs.note': 'Plane coordinates: columns easting, northing (or x, y). In the Polish grids x is northing.',
     'demo.btn': '⬡ Load Demo Data (Portugal)',
     'data.clear': '✕ Clear data',
     'demo.siteLabel': 'Portugal PV Site (Demo)',
@@ -177,6 +193,21 @@ const I18N = {
     'upload.subtitle': 'Upuść dane pomiarów geodezyjnych',
     'csv.expected': 'Oczekiwane kolumny:',
     'csv.min': 'lat, lon, elevation (minimum)',
+    'csv.plane': 'albo easting, northing zamiast lat, lon',
+    'crs.label': 'WSPÓŁRZĘDNE W PLIKU',
+    'crs.latlon': 'Szerokość / długość geograficzna (WGS84)',
+    'crs.utm': 'UTM, dowolna strefa (WGS84)',
+    'crs.pl1992': 'Polska PL-1992 (EPSG:2180)',
+    'crs.pl2000z5': 'Polska PL-2000 strefa 5 (EPSG:2176)',
+    'crs.pl2000z6': 'Polska PL-2000 strefa 6 (EPSG:2177)',
+    'crs.pl2000z7': 'Polska PL-2000 strefa 7 (EPSG:2178)',
+    'crs.pl2000z8': 'Polska PL-2000 strefa 8 (EPSG:2179)',
+    'crs.pttm06': 'Portugalia PT-TM06 (EPSG:3763)',
+    'crs.zoneAria': 'Strefa UTM (1–60)',
+    'crs.hemisphereAria': 'Półkula',
+    'crs.north': 'Północna',
+    'crs.south': 'Południowa',
+    'crs.note': 'Współrzędne płaskie: kolumny easting, northing (albo x, y). W polskich układach x to współrzędna północna.',
     'demo.btn': '⬡ Wczytaj dane demo (Portugalia)',
     'data.clear': '✕ Wyczyść dane',
     'demo.siteLabel': 'Portugalia (dane demo)',
@@ -403,6 +434,37 @@ function currentSystemLoss() {
     try { localStorage.setItem(SYSTEM_LOSS_STORAGE, String(pct)); } catch { /* ignore */ }
     if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
   });
+})();
+
+// ─── Coordinate system of uploaded files (remembered in this browser) ───
+// '' = lat/lon; otherwise a crs.js id such as 'utm:34N', 'pl2000:7' or 'pttm06'.
+
+function currentCRS() {
+  const choice = document.getElementById('crs-select').value;
+  if (choice !== 'utm') return choice;
+  const zone = Math.min(60, Math.max(1, Math.round(Number(document.getElementById('utm-zone').value)) || 33));
+  return `utm:${zone}${document.getElementById('utm-hemisphere').value}`;
+}
+
+(function initCRS() {
+  const select = document.getElementById('crs-select');
+  const zone = document.getElementById('utm-zone');
+  const hemisphere = document.getElementById('utm-hemisphere');
+  const sync = () => { document.getElementById('crs-utm').hidden = select.value !== 'utm'; };
+  try {
+    const saved = localStorage.getItem(CRS_STORAGE) || '';
+    const utm = /^utm:(\d+)([NS])$/.exec(saved);
+    if (utm) { select.value = 'utm'; zone.value = utm[1]; hemisphere.value = utm[2]; }
+    else if ([...select.options].some(o => o.value === saved)) select.value = saved;
+  } catch { /* ignore */ }
+  sync();
+
+  const save = () => {
+    sync();
+    if (select.value === 'utm') zone.value = currentCRS().slice(4, -1); // show the zone actually used (clamped)
+    try { localStorage.setItem(CRS_STORAGE, currentCRS()); } catch { /* ignore */ }
+  };
+  [select, zone, hemisphere].forEach(el => el.addEventListener('change', save));
 })();
 
 // ─── Domain logic ─────────────────────────────────────────
@@ -1234,7 +1296,7 @@ function handleFile(file) {
   const reader = new FileReader();
   reader.onload = (ev) => {
     try {
-      const { points: data, rowErrors } = SurveyCSV.parseCSV(ev.target.result);
+      const { points: data, rowErrors } = SurveyCSV.parseCSV(ev.target.result, { crs: currentCRS() });
       if (rowErrors.length) {
         showToast(rowErrors.length === 1
           ? `Skipped 1 invalid row: ${rowErrors[0]}`
