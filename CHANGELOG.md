@@ -14,6 +14,11 @@ All notable changes to this project are documented here. The format follows
 - **Clear data** button: back to the start screen, and the auto-restored last session is
   forgotten so a reload stays empty; saved analyses and settings stay (#23).
 
+### Changed
+- The AI backend authenticates to the Claude API with workload identity federation:
+  the Cloud Run service account's Google ID token is exchanged for a 10-minute Anthropic
+  token, so no API key is stored in Secret Manager or anywhere else (#25).
+
 ## [1.0.0] - 2026-10-01
 
 First tagged release.
