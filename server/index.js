@@ -4,6 +4,7 @@
 import { createServer } from 'node:http';
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
+import { anthropicClientOptions } from './lib/anthropic-auth.js';
 import { createHandler, IpLimiter, LIMITS, MemoryCounter } from './lib/app.js';
 import { FirestoreCounter } from './lib/firestore-counter.js';
 
@@ -16,19 +17,21 @@ const allowedOrigins = (env.ALLOWED_ORIGINS || 'https://wyplerszymon0-lab.github
 // AI_PROVIDER picks where Claude runs; both clients expose the same messages.stream().
 //   vertex (default): Claude on Vertex AI, billed to the GCP project; credentials come
 //                     from the Cloud Run service account (locally: gcloud ADC), no key.
-//   anthropic:        the Claude API; ANTHROPIC_API_KEY is mounted from Secret Manager.
+//   anthropic:        the Claude API; on Cloud Run via workload identity federation (the
+//                     service account's Google token, no stored key), locally with a key.
+//                     See lib/anthropic-auth.js.
 const provider = env.AI_PROVIDER || 'vertex';
 let client;
+let auth = 'service account';
 if (provider === 'vertex') {
   client = new AnthropicVertex({
     projectId: env.GOOGLE_CLOUD_PROJECT || 'solar-site-intelligence',
     region: env.VERTEX_REGION || 'global',
   });
 } else if (provider === 'anthropic') {
-  // A key pasted into Secret Manager often carries a trailing newline.
-  const apiKey = (env.ANTHROPIC_API_KEY || '').trim();
-  if (!apiKey) throw new Error('AI_PROVIDER=anthropic needs ANTHROPIC_API_KEY');
-  client = new Anthropic({ apiKey });
+  const { mode, options } = anthropicClientOptions(env);
+  auth = mode;
+  client = new Anthropic(options);
 } else {
   throw new Error(`unknown AI_PROVIDER "${provider}" (use vertex or anthropic)`);
 }
@@ -48,5 +51,5 @@ createServer((req, res) => {
     res.end(JSON.stringify({ type: 'error', error: { message: 'internal error' } }));
   });
 }).listen(port, () => {
-  console.log(`solar-ai listening on ${port}; provider ${provider}; daily limit ${dailyLimit}; origins ${allowedOrigins.join(' ')}`);
+  console.log(`solar-ai listening on ${port}; provider ${provider} (${auth}); daily limit ${dailyLimit}; origins ${allowedOrigins.join(' ')}`);
 });

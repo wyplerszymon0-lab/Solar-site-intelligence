@@ -126,12 +126,12 @@ So that every visitor can see the AI report, the page sends the conversation to 
 
 ```
 browser (GitHub Pages) ──POST /report──▶ Cloud Run "solar-ai" (Node, europe-central2) ──▶ Claude Haiku 5.5
-                     ◀── same SSE stream ──┘    │ key from Secret Manager, counter in Firestore
+                     ◀── same SSE stream ──┘    │ no stored key (workload identity), counter in Firestore
 ```
 
 - **The server owns the prompt.** The page sends only the language and the conversation; the system prompt and the model are fixed on the server, so the public endpoint is not a free general-purpose chatbot.
 - **Hard limits:** 50 reports a day in total (a Firestore counter, so it holds across instances), 10 per visitor, at most 11 messages and 20 000 characters per request, and only this site's origin (others get 403). Cloud Run scales to zero and to at most 2 instances.
-- **No key in the code or the repository:** the Anthropic key lives in Secret Manager and is mounted into the service; the service account can read that one secret, call nothing else, and write the counter.
+- **No stored API key at all (workload identity federation):** the service asks Google's metadata server for an ID token of its own service account (audience `api.anthropic.com`), and Anthropic exchanges it for an access token valid 10 minutes. The federation rule in Claude Console accepts only this service account (its numeric ID and email), so there is nothing to leak or rotate. The SDK refreshes the token before it expires; the server refuses to start if an API key is configured next to the rule, because the SDK would prefer the key silently ([`server/lib/anthropic-auth.js`](server/lib/anthropic-auth.js)). Locally, `ANTHROPIC_API_KEY` still works.
 - **Measured cost:** one report is about 450 input and 2 100 output tokens (part of it the model's thinking), **$0.0011**. At the daily cap that is at most about $0.06 a day; prepaid credits without auto-reload are a ceiling on top, and a GCP budget alert watches the project.
 - **Same stream format:** the server forwards the Messages API's server-sent events unchanged, so the page reads one format whether it talks to Anthropic directly or to the backend.
 
@@ -143,7 +143,7 @@ browser (GitHub Pages) ──POST /report──▶ Cloud Run "solar-ai" (Node, e
 - **Leaflet.js** + **Leaflet.markercluster** + **Leaflet.heat** — map rendering, clustering, heatmap view
 - **NASA POWER API** — satellite irradiance and temperature climatology (no key needed)
 - **Claude API** (Opus 5 / Sonnet 5 / Haiku 4.5 with your key; Haiku 5.5 through the backend) — AI site analysis and follow-up chat
-- **Google Cloud Run + Secret Manager + Firestore** — the keyless AI backend in `server/` (Node, `@anthropic-ai/sdk`)
+- **Google Cloud Run + Firestore + Anthropic workload identity federation** — the keyless AI backend in `server/` (Node, `@anthropic-ai/sdk`)
 - **`node --test`** — tests for the yield model (including the PVGIS validation above), the CSV parser, the site geometry and the GeoJSON/print exports; run `node --test` from the repo root
 - **GitHub Pages** — hosting
 
