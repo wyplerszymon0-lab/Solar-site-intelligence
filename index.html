@@ -159,6 +159,45 @@
       <button class="btn btn-ghost" id="clear-btn" style="margin-top:8px;display:none" data-i18n="data.clear">✕ Clear data</button>
     </div>
 
+    <!-- ECONOMICS (user's own prices, any currency) -->
+    <div class="section">
+      <div class="section-label" data-i18n="econ.label">Economics (your prices)</div>
+      <div class="econ-grid">
+        <div class="input-group">
+          <label class="input-label" for="econ-currency" data-i18n="econ.currency">CURRENCY</label>
+          <input type="text" id="econ-currency" maxlength="3" placeholder="EUR" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="econ-capex" data-i18n="econ.capex">INVESTMENT / kWp</label>
+          <input type="text" id="econ-capex" inputmode="decimal" placeholder="—" autocomplete="off">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="econ-price" data-i18n="econ.price">ENERGY VALUE / kWh</label>
+          <input type="text" id="econ-price" inputmode="decimal" placeholder="—" autocomplete="off">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="econ-om" data-i18n="econ.om">O&amp;M / kWp / YEAR</label>
+          <input type="text" id="econ-om" inputmode="decimal" placeholder="0" autocomplete="off">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="econ-rate" data-i18n="econ.rate">DISCOUNT RATE % (REAL)</label>
+          <input type="text" id="econ-rate" inputmode="decimal" placeholder="—" autocomplete="off">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="econ-degradation" data-i18n="econ.degradation">DEGRADATION % / YEAR</label>
+          <input type="text" id="econ-degradation" inputmode="decimal" placeholder="0.5" autocomplete="off">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="econ-lifetime" data-i18n="econ.lifetime">LIFETIME, YEARS</label>
+          <input type="text" id="econ-lifetime" inputmode="numeric" placeholder="25" autocomplete="off">
+        </div>
+      </div>
+      <div class="key-note" data-i18n="econ.note">
+        Per kWp, in today's money. Enter investment, energy value and discount rate; prices are not guessed.
+        Taxes, subsidies and loans are left out.
+      </div>
+    </div>
+
     <!-- HISTORY -->
     <div class="section">
       <div class="section-label" data-i18n="history.label">Saved Analyses (this browser)</div>
@@ -205,6 +244,8 @@
           <div class="stat-label" id="stat-p90-label" data-i18n="stat.p90">P50 / P90, kWh/kWp per year</div>
         </div>
       </div>
+
+      <div class="econ-results" id="econ-results" aria-live="polite"></div>
 
       <div class="export-actions">
         <button class="btn btn-ghost" id="export-csv-btn" style="display:none" data-i18n="export.csv">↓ CSV</button>
@@ -330,6 +371,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="solar-model.js"></script>
+<script src="economics.js"></script>
 <script src="crs.js"></script>
 <script src="csv.js"></script>
 <script src="geometry.js"></script>

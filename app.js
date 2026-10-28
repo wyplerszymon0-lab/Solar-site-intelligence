@@ -26,6 +26,7 @@ const HISTORY_STORAGE     = 'solarSite.history';
 const LAST_SESSION_STORAGE = SiteSession.LAST_SESSION_KEY;  // session.js decides what Clear forgets
 const SYSTEM_LOSS_STORAGE = 'solarSite.systemLossPct';
 const CRS_STORAGE         = 'solarSite.crs';
+const ECONOMICS_STORAGE   = 'solarSite.economics';
 const HISTORY_LIMIT      = 15;
 
 const SECTION_HEADERS = {
@@ -87,6 +88,26 @@ const I18N = {
     'stat.p90': 'P50 / P90, kWh/kWp per year',
     'stat.p90Years': 'P50 / P90, kWh/kWp per year ({first}–{last})',
     'stat.p90Title': 'Same model run on each year {first}–{last}. P50 is the average year; P90 is exceeded in 9 years out of 10 (normal approximation, σ {cov}%; empirical: {emp}). Weather only: model and satellite-data uncertainty would widen it.',
+    'econ.label': 'Economics (your prices)',
+    'econ.currency': 'CURRENCY',
+    'econ.capex': 'INVESTMENT / kWp',
+    'econ.price': 'ENERGY VALUE / kWh',
+    'econ.om': 'O&M / kWp / YEAR',
+    'econ.rate': 'DISCOUNT RATE % (REAL)',
+    'econ.degradation': 'DEGRADATION % / YEAR',
+    'econ.lifetime': 'LIFETIME, YEARS',
+    'econ.note': "Per kWp, in today's money. Enter investment, energy value and discount rate; prices are not guessed. Taxes, subsidies and loans are left out.",
+    'econ.missing': 'Economics: enter investment, energy value and discount rate under Economics to see payback and LCOE.',
+    'econ.perKwp': 'PER kWp',
+    'econ.yield': 'Yield, first year',
+    'econ.revenue': 'Revenue, first year',
+    'econ.lcoe': 'LCOE',
+    'econ.payback': 'Payback',
+    'econ.npv': 'NPV at {rate}%',
+    'econ.irr': 'IRR (real)',
+    'econ.never': 'not within lifetime',
+    'econ.years': '{n} yr',
+    'econ.resultNote': '{years} years, {deg}% degradation a year. P90 uses the yield of a poor year (1 in 10) every year: a cautious case, not a forecast.',
     'export.csv': '↓ CSV',
     'export.geojson': '↓ GeoJSON',
     'export.pdf': '🖨 PDF Report',
@@ -233,6 +254,26 @@ const I18N = {
     'stat.p90': 'P50 / P90, kWh/kWp rocznie',
     'stat.p90Years': 'P50 / P90, kWh/kWp rocznie ({first}–{last})',
     'stat.p90Title': 'Ten sam model policzony dla każdego roku {first}–{last}. P50 to przeciętny rok; P90 jest przekraczany w 9 latach na 10 (przybliżenie normalne, σ {cov}%; empirycznie: {emp}). Tylko zmienność pogody: niepewność modelu i danych satelitarnych by ją poszerzyła.',
+    'econ.label': 'Ekonomia (twoje ceny)',
+    'econ.currency': 'WALUTA',
+    'econ.capex': 'INWESTYCJA / kWp',
+    'econ.price': 'WARTOŚĆ ENERGII / kWh',
+    'econ.om': 'EKSPLOATACJA / kWp / ROK',
+    'econ.rate': 'STOPA DYSKONTOWA % (REALNA)',
+    'econ.degradation': 'DEGRADACJA % / ROK',
+    'econ.lifetime': 'ŻYWOTNOŚĆ, LATA',
+    'econ.note': 'Na kWp, w dzisiejszych pieniądzach. Wpisz inwestycję, wartość energii i stopę dyskontową; ceny nie są zgadywane. Bez podatków, dotacji i kredytu.',
+    'econ.missing': 'Ekonomia: wpisz inwestycję, wartość energii i stopę dyskontową w sekcji Ekonomia, żeby zobaczyć zwrot i LCOE.',
+    'econ.perKwp': 'NA kWp',
+    'econ.yield': 'Uzysk, pierwszy rok',
+    'econ.revenue': 'Przychód, pierwszy rok',
+    'econ.lcoe': 'LCOE',
+    'econ.payback': 'Okres zwrotu',
+    'econ.npv': 'NPV przy {rate}%',
+    'econ.irr': 'IRR (realna)',
+    'econ.never': 'nie w okresie życia',
+    'econ.years': '{n} lat',
+    'econ.resultNote': '{years} lat, degradacja {deg}% rocznie. P90 zakłada uzysk słabego roku (1 na 10) co roku: wariant ostrożny, nie prognoza.',
     'export.csv': '↓ CSV',
     'export.geojson': '↓ GeoJSON',
     'export.pdf': '🖨 Raport PDF',
@@ -481,6 +522,53 @@ function currentCRS() {
   [select, zone, hemisphere].forEach(el => el.addEventListener('change', save));
 })();
 
+// ─── Economics inputs (the user's own prices, remembered in this browser) ───
+
+const ECONOMICS_FIELDS = ['currency', 'capex', 'price', 'om', 'rate', 'degradation', 'lifetime'];
+const econInput = (field) => document.getElementById('econ-' + field);
+
+// The inputs as numbers for economics.js, or null until investment, energy value
+// and discount rate are all given. Percentages are typed as percent.
+function currentEconomics() {
+  const n = (field) => SolarEconomics.parseAmount(econInput(field).value);
+  const capex = n('capex'), price = n('price'), ratePct = n('rate');
+  if (capex == null || price == null || ratePct == null || capex <= 0 || price < 0 || ratePct <= -100) return null;
+  const degradationPct = n('degradation');
+  const lifetime = Math.round(n('lifetime') ?? SolarEconomics.DEFAULTS.lifetime);
+  return {
+    currency: econInput('currency').value.trim().toUpperCase().slice(0, 3),
+    capex, price, rate: ratePct / 100,
+    om: Math.max(0, n('om') ?? SolarEconomics.DEFAULTS.om),
+    degradation: degradationPct == null ? SolarEconomics.DEFAULTS.degradation : Math.min(5, Math.max(0, degradationPct)) / 100,
+    lifetime: Math.min(50, Math.max(1, lifetime)),
+  };
+}
+
+(function initEconomics() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ECONOMICS_STORAGE) || '{}');
+    ECONOMICS_FIELDS.forEach(f => { if (typeof saved[f] === 'string') econInput(f).value = saved[f]; });
+  } catch { /* ignore */ }
+
+  ECONOMICS_FIELDS.forEach(f => econInput(f).addEventListener('change', () => {
+    const plain = Object.fromEntries(ECONOMICS_FIELDS.map(k => [k, econInput(k).value]));
+    try { localStorage.setItem(ECONOMICS_STORAGE, JSON.stringify(plain)); } catch { /* ignore */ }
+    if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
+  }));
+})();
+
+// P50 and (when the yearly series is in) P90 results for one kWp.
+function economicsFor(stats) {
+  const inputs = currentEconomics();
+  if (!inputs) return null;
+  const run = (yieldKwh) => ({ yieldKwh, ...SolarEconomics.evaluate({ ...inputs, yieldKwh }) });
+  return {
+    inputs,
+    p50: run(stats.variability ? stats.variability.p50 : stats.yieldEst),
+    p90: stats.variability ? run(stats.variability.p90) : null,
+  };
+}
+
 // ─── Domain logic ─────────────────────────────────────────
 // Survey geometry lives in geometry.js (window.SiteGeometry), with its own tests.
 const {
@@ -686,13 +774,15 @@ function computeSiteStats(data) {
   const shadingFlags = detectShading(data, centerLat);
   const outlierFlags = detectOutliers(data);
 
-  return {
+  const stats = {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
     systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, variability,
     facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
+  stats.economics = economicsFor(stats);
+  return stats;
 }
 
 // ─── Charts (inline SVG, numeric data only — no user text is interpolated) ─
@@ -1099,7 +1189,34 @@ function renderStats(data, stats) {
     (retrieved ? ' · ' + t('source.retrieved', { date: retrieved }) : '');
   document.getElementById('point-count').textContent  = t('header.pointsLoaded', { n: data.length });
 
+  renderEconomics(stats.economics);
   renderCharts(stats);
+}
+
+// Per-kWp economics as a small table, P50 next to P90. Only numbers and the
+// sanitised 3-letter currency code are interpolated.
+function renderEconomics(econ) {
+  const el = document.getElementById('econ-results');
+  if (!econ) {
+    el.innerHTML = `<div class="key-note">${t('econ.missing')}</div>`;
+    return;
+  }
+  const cur = econ.inputs.currency.replace(/[^A-Z]/g, '');
+  const locale = currentLang === 'pl' ? 'pl-PL' : 'en-GB';
+  const money = (v, digits = 0) => v.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits }) + (cur ? ' ' + cur : '');
+  const lcoeDigits = econ.p50.lcoe < 1 ? 3 : 2;
+  const cols = econ.p90 ? [econ.p50, econ.p90] : [econ.p50];
+  const row = (label, fn) => `<tr><td>${label}</td>${cols.map(c => `<td>${fn(c)}</td>`).join('')}</tr>`;
+  el.innerHTML =
+    `<table class="data-table"><thead><tr><th>${t('econ.perKwp')}</th><th>P50</th>${econ.p90 ? '<th>P90</th>' : ''}</tr></thead><tbody>` +
+    row(t('econ.yield'), c => Math.round(c.yieldKwh).toLocaleString(locale) + ' kWh') +
+    row(t('econ.revenue'), c => money(c.firstYearRevenue)) +
+    row(t('econ.lcoe'), c => money(c.lcoe, lcoeDigits) + '/kWh') +
+    row(t('econ.payback'), c => c.payback == null ? t('econ.never') : t('econ.years', { n: c.payback.toFixed(1) })) +
+    row(t('econ.npv', { rate: +(econ.inputs.rate * 100).toFixed(2) }), c => money(c.npv)) +
+    row(t('econ.irr'), c => c.irr == null ? '—' : (c.irr * 100).toFixed(1) + '%') +
+    `</tbody></table>` +
+    `<div class="key-note">${t('econ.resultNote', { years: econ.inputs.lifetime, deg: +(econ.inputs.degradation * 100).toFixed(2) })}</div>`;
 }
 
 // ─── Map view toggle (markers / heatmap) ──────────────────
@@ -1186,9 +1303,21 @@ function buildInitialPrompt(stats) {
         `${stats.variability.p90Empirical}), year-to-year variation ${stats.variability.covPct}%. Weather variability only, ` +
         `not model or data uncertainty.\n`
       : '') +
+    (stats.economics ? economicsPromptLine(stats.economics) : '') +
     `SUGGESTED ROW COUNT (site tool estimate): ${stats.rows ?? 'N/A'}\n\n` +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');
+}
+
+// The user's own prices and the per-kWp results, for the AI prompt.
+function economicsPromptLine(econ) {
+  const i = econ.inputs, cur = i.currency.replace(/[^A-Z]/g, '') || '(currency not given)';
+  const fmt = (c) => `LCOE ${c.lcoe.toFixed(4)} ${cur}/kWh, payback ${c.payback == null ? 'not within lifetime' : c.payback.toFixed(1) + ' years'}, ` +
+    `NPV ${Math.round(c.npv)} ${cur}, IRR ${c.irr == null ? 'n/a' : (c.irr * 100).toFixed(1) + '%'}`;
+  return `ECONOMICS PER kWp (user's prices, real terms; no taxes, subsidies or financing): investment ${i.capex} ${cur}, ` +
+    `energy value ${i.price} ${cur}/kWh, O&M ${i.om} ${cur}/yr, discount rate ${+(i.rate * 100).toFixed(2)}%, ` +
+    `degradation ${+(i.degradation * 100).toFixed(2)}%/yr, ${i.lifetime} years. P50: ${fmt(econ.p50)}` +
+    (econ.p90 ? `. P90 yield every year: ${fmt(econ.p90)}` : '') + `.\n`;
 }
 
 // ─── Analyze (streaming + prompt caching + follow-up chat) ─

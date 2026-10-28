@@ -925,3 +925,17 @@ input:focus, select:focus { border-color: var(--accent); }
   margin-top: 8px;
 }
 .crs-utm[hidden] { display: none; }
+
+/* ECONOMICS: inputs in two columns, results as a small P50 / P90 table */
+.econ-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+}
+
+.econ-grid .input-group:first-child { grid-column: 1 / -1; }
+
+.econ-results { margin-top: 12px; }
+
+.econ-results .data-table td:not(:first-child),
+.econ-results .data-table th:not(:first-child) { text-align: right; }
