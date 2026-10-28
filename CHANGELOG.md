@@ -17,6 +17,10 @@ All notable changes to this project are documented here. The format follows
   UTM (any zone, north or south), PL-1992, PL-2000 zones 5–8 or PT-TM06 are converted
   to lat/lon on load (`crs.js`, Krüger series, checked against PROJ to 0.1 mm). A wrong
   zone or swapped columns is reported instead of plotted (#27).
+- **Year-to-year yield, P50 / P90:** the yield model runs on NASA POWER's monthly data
+  for every year since 2001; P50, P90 (normal approximation, empirical 10th percentile as
+  a check) and a chart of each year. Warsaw at 35° S: P50 990, P90 936 kWh/kWp, 4.2%
+  year-to-year variation. Weather variability only (#29).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:

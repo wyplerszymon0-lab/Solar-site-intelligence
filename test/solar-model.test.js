@@ -135,3 +135,61 @@ test('entries without a usable timestamp count as stale', () => {
   assert.equal(M.climatologyIsFresh({ fetchedAt: '2026-10-05T00:00:00Z' }, now), false); // clock ahead
   for (const v of [undefined, null, 'loading', 'error']) assert.equal(M.climatologyIsFresh(v, now), false);
 });
+
+// ─── Year-to-year variability (NASA POWER monthly, Warsaw 2001–2025) ───
+
+const warsawYears = () => M.parsePowerMonthly(require('./fixtures/nasa-power-monthly-warsaw.json'));
+
+test('monthly series parses into one climatology-shaped entry per complete year', () => {
+  const series = warsawYears();
+  assert.deepEqual([series.length, series[0].year, series.at(-1).year], [25, 2001, 2025]);
+  assert.equal(series[0].ghi.length, 12);
+  assert.ok(series.every(y => y.ghi.every(v => v > 0) && y.temp.length === 12));
+});
+
+test('years with a missing month are left out, too few years is an error', () => {
+  const json = structuredClone(require('./fixtures/nasa-power-monthly-warsaw.json'));
+  json.properties.parameter.ALLSKY_SFC_SW_DIFF['202507'] = -999; // not yet published
+  delete json.properties.parameter.T2M['200302'];
+  const years = M.parsePowerMonthly(json).map(y => y.year);
+  assert.equal(years.length, 23);
+  assert.ok(!years.includes(2025) && !years.includes(2003));
+
+  const p = json.properties.parameter;
+  for (const name of Object.keys(p)) {
+    for (const k of Object.keys(p[name])) if (k >= '200601') delete p[name][k];
+  }
+  assert.throws(() => M.parsePowerMonthly(json), /4 complete years.*at least 10/);
+});
+
+test('the yearly runs average to the climatology over the same years', () => {
+  // Same model, same 2001–2020 period: the mean of the yearly yields matches the
+  // climatology's yield to within 0.1 %, so both requests describe the same data.
+  const series = warsawYears().filter(y => y.year <= 2020);
+  const mean = M.yearlyYields(series, 52.2297, 35, 180).reduce((s, y) => s + y.annual, 0) / series.length;
+  const fromClimatology = M.monthlyYield(clim('warsaw'), 52.2297, 35, 180).annual;
+  assert.ok(Math.abs(mean / fromClimatology - 1) < 0.001, `${mean} vs ${fromClimatology}`);
+});
+
+test('exceedance: P50 is the mean, P90 is 1.2816 sample sigma below it', () => {
+  const e = M.exceedance([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.equal(e.p50, 5.5);
+  assert.ok(Math.abs(e.sd - 3.02765) < 1e-5);           // n − 1 in the denominator
+  assert.ok(Math.abs(e.p90 - (5.5 - 1.2816 * e.sd)) < 1e-12);
+  assert.ok(Math.abs(e.p90Empirical - 1.9) < 1e-12);    // between the 1st and 2nd value
+  assert.deepEqual([e.n, e.min, e.max], [10, 1, 10]);
+  assert.throws(() => M.exceedance([5]), /two years/);
+});
+
+test('Warsaw: about 4 % year-to-year variation, P90 about 5 % below P50', () => {
+  const e = M.exceedance(M.yearlyYields(warsawYears(), 52.2297, 35, 180).map(y => y.annual));
+  assert.ok(e.cov > 0.03 && e.cov < 0.06, `cov ${e.cov}`);
+  assert.ok(e.p90 / e.p50 > 0.92 && e.p90 / e.p50 < 0.96, `ratio ${e.p90 / e.p50}`);
+  assert.ok(Math.abs(e.p90Empirical - e.p90) / e.p50 < 0.02); // the normal assumption holds here
+});
+
+test('monthly URL asks for whole years from 2001', () => {
+  const url = M.powerMonthlyUrl(52.22971, 21.01219, 2025);
+  assert.match(url, /temporal\/monthly\/point\?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DIFF,T2M/);
+  assert.match(url, /latitude=52\.2297&longitude=21\.0122&start=2001&end=2025/);
+});

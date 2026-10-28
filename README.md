@@ -136,6 +136,22 @@ Adding glass reflection losses was a trade-off, kept because it is physically co
 
 **Known limits.** No horizon or near-object shading. The optimal tilt comes out 1–3° below PVGIS's (Warsaw 36° vs 39°), though yield is flat near the optimum. NASA POWER's resolution is ~0.5–1°, so coastal and mountain sites mix neighbouring climates.
 
+### Year-to-year variability (P50 / P90)
+
+The average year is not the whole story: lenders size a solar farm's debt on **P90**, the annual yield exceeded in 9 years out of 10. The app fetches NASA POWER's month-by-month values for every year since 2001 (the CERES-based record the climatology also comes from; earlier years use another satellite product and would mix two records), runs the same yield model on each year at the surveyed orientation, and reports:
+
+- **P50** = the mean, **P90** = mean − 1.2816 σ (normal approximation, the usual convention), with the empirical 10th percentile in the tooltip and the AI prompt as a check;
+- a chart of each year's yield with the P50 and P90 lines, years below P90 in red.
+
+| Site | Years | P50 | P90 | Year-to-year σ | Empirical 10th pct. |
+|------|-------|-----|-----|----------------|---------------------|
+| Warsaw, 35° S | 2001–2025 | 990 | 936 (−5.4%) | 4.2% | 932 |
+| Lisbon demo, surveyed 11.9° / 175° | 2001–2025 | 1464 | 1417 (−3.2%) | 2.5% | — |
+
+As a consistency check, the mean of the yearly runs over 2001–2020 (Warsaw: 986.0 kWh/kWp) matches the yield from the 2001–2020 climatology (986.3) to 0.03%: the two requests describe the same data.
+
+**What this P90 is not.** It is weather variability only. A bankable P90 also folds in the uncertainty of the yield model (see the PVGIS comparison above) and of the satellite irradiance, typically a few percent each, which would push it lower. Years NASA has not completed yet are left out.
+
 ## A note on the heuristic estimates
 
 Row spacing, shading risk and outlier detection are **rough, client-side approximations** built from the uploaded lat/lon/elevation/slope/azimuth alone — there's no true 3D shading model and no soil or grid-connection analysis behind them. Treat them as a quick first read, not a substitute for a proper site assessment.
