@@ -84,6 +84,9 @@ const I18N = {
     'stat.area': 'Site Area est. m²',
     'stat.rows': 'Est. Panel Rows',
     'stat.benchmark': 'Yield vs optimal orientation at this site',
+    'stat.p90': 'P50 / P90, kWh/kWp per year',
+    'stat.p90Years': 'P50 / P90, kWh/kWp per year ({first}–{last})',
+    'stat.p90Title': 'Same model run on each year {first}–{last}. P50 is the average year; P90 is exceeded in 9 years out of 10 (normal approximation, σ {cov}%; empirical: {emp}). Weather only: model and satellite-data uncertainty would widen it.',
     'export.csv': '↓ CSV',
     'export.geojson': '↓ GeoJSON',
     'export.pdf': '🖨 PDF Report',
@@ -99,6 +102,9 @@ const I18N = {
     'charts.tiltSurveyed': 'surveyed',
     'charts.tiltNeedsSatellite': 'Needs satellite irradiance data',
     'charts.empty': 'Not enough data',
+    'charts.yearly': 'Annual Yield by Year',
+    'charts.yearlyNeedsData': 'Needs year-by-year satellite data',
+    'charts.yearlyBelowP90': 'below P90',
     'charts.compassAvg': 'Avg azimuth',
     'charts.compassOptimal': 'Optimal',
     'rating.good': 'Good',
@@ -168,6 +174,7 @@ const I18N = {
     'aria.slope': 'Slope of each of {n} points, from {min}° to {max}°',
     'aria.compass': 'Average panel azimuth {avg}, optimal {target}°',
     'aria.seasonal': 'Estimated monthly yield in kWh/kWp: {values}',
+    'aria.yearly': 'Annual yield in kWh/kWp by year: {values}. P50 {p50}, P90 {p90}.',
     'aria.tilt': 'Annual yield by tilt: optimum {opt}° with {max} kWh/kWp',
     'aria.tiltSurveyed': ', surveyed tilt {st}° reaches {pct}% of it',
     'source.loading': 'Fetching satellite irradiance…',
@@ -223,6 +230,9 @@ const I18N = {
     'stat.area': 'Szac. powierzchnia m²',
     'stat.rows': 'Szac. liczba rzędów',
     'stat.benchmark': 'Wydajność vs optymalna orientacja w tym miejscu',
+    'stat.p90': 'P50 / P90, kWh/kWp rocznie',
+    'stat.p90Years': 'P50 / P90, kWh/kWp rocznie ({first}–{last})',
+    'stat.p90Title': 'Ten sam model policzony dla każdego roku {first}–{last}. P50 to przeciętny rok; P90 jest przekraczany w 9 latach na 10 (przybliżenie normalne, σ {cov}%; empirycznie: {emp}). Tylko zmienność pogody: niepewność modelu i danych satelitarnych by ją poszerzyła.',
     'export.csv': '↓ CSV',
     'export.geojson': '↓ GeoJSON',
     'export.pdf': '🖨 Raport PDF',
@@ -238,6 +248,9 @@ const I18N = {
     'charts.tiltSurveyed': 'pomiar',
     'charts.tiltNeedsSatellite': 'Wymaga danych satelitarnych',
     'charts.empty': 'Za mało danych',
+    'charts.yearly': 'Roczny uzysk w kolejnych latach',
+    'charts.yearlyNeedsData': 'Wymaga danych satelitarnych rok po roku',
+    'charts.yearlyBelowP90': 'poniżej P90',
     'charts.compassAvg': 'Śr. azymut',
     'charts.compassOptimal': 'Optymalny',
     'rating.good': 'Dobra',
@@ -307,6 +320,7 @@ const I18N = {
     'aria.slope': 'Nachylenie każdego z {n} punktów, od {min}° do {max}°',
     'aria.compass': 'Średni azymut paneli {avg}, optymalny {target}°',
     'aria.seasonal': 'Szacowany uzysk miesięczny w kWh/kWp: {values}',
+    'aria.yearly': 'Roczny uzysk w kWh/kWp w kolejnych latach: {values}. P50 {p50}, P90 {p90}.',
     'aria.tilt': 'Uzysk roczny w zależności od nachylenia: optimum {opt}°, {max} kWh/kWp',
     'aria.tiltSurveyed': ', zmierzone nachylenie {st}° daje {pct}% tej wartości',
     'source.loading': 'Pobieranie danych satelitarnych…',
@@ -516,55 +530,62 @@ function estimateRowLayout(lat, tiltDeg) {
 }
 
 // ─── Satellite irradiance (NASA POWER) ─────────────────────
-// Monthly climatology for the site centre, cached in memory and in this
-// browser (it is ~40 numbers per location and changes only yearly).
-
-const CLIMATOLOGY_STORAGE = 'solarSite.climatology';
-const climatologyCache = new Map(); // key -> climatology object | 'loading' | 'error'
+// Two requests per site centre, each cached in memory and in this browser (the
+// data changes only yearly): the monthly climatology (~40 numbers) that drives
+// the yield, and the month-by-month series since 2001 for year-to-year spread.
 
 function climatologyKey(lat, lon) {
   return `${lat.toFixed(2)},${lon.toFixed(2)}`;
 }
 
-(function loadStoredClimatology() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(CLIMATOLOGY_STORAGE) || '{}');
-    Object.entries(stored).forEach(([k, v]) => climatologyCache.set(k, v));
-  } catch { /* ignore */ }
-})();
-
-function storeClimatology() {
-  const plain = {};
-  climatologyCache.forEach((v, k) => { if (typeof v === 'object') plain[k] = v; });
-  try { localStorage.setItem(CLIMATOLOGY_STORAGE, JSON.stringify(plain)); } catch { /* ignore */ }
-}
-
-const climatologyRefreshing = new Set(); // keys whose stale entry is being refetched
-
-// Fetches the climatology if it is missing or older than CLIMATOLOGY_MAX_AGE_DAYS;
-// calls onReady() once the new data (or a failure) is known. A stale entry stays
+// get(lat, lon) → data object | 'loading' | 'error' | undefined.
+// ensure(lat, lon, onReady) fetches when missing or older than CLIMATOLOGY_MAX_AGE_DAYS
+// and calls onReady() once the new data (or a failure) is known. A stale entry stays
 // in use while it is refetched, and is kept if the refetch fails.
-async function ensureClimatology(lat, lon, onReady) {
-  const key = climatologyKey(lat, lon);
-  const cached = climatologyCache.get(key);
-  if (cached === 'loading' || cached === 'error' || climatologyRefreshing.has(key) ||
-      SolarModel.climatologyIsFresh(cached)) return;
-  const stale = typeof cached === 'object' ? cached : null;
-  if (stale) climatologyRefreshing.add(key);
-  else climatologyCache.set(key, 'loading');
+function powerCache(storageKey, urlFor, parse, label) {
+  const cache = new Map();
+  const refreshing = new Set(); // keys whose stale entry is being refetched
   try {
-    const res = await fetch(SolarModel.powerClimatologyUrl(lat, lon));
-    if (!res.ok) throw new Error(`NASA POWER HTTP ${res.status}`);
-    const clim = SolarModel.parsePowerClimatology(await res.json());
-    climatologyCache.set(key, { ...clim, fetchedAt: new Date().toISOString() });
-    storeClimatology();
-  } catch (err) {
-    console.warn('[Solar Site] satellite irradiance unavailable, using ' + (stale ? 'cached data' : 'rough estimate') + ':', err);
-    if (!stale) climatologyCache.set(key, 'error');
+    const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    Object.entries(stored).forEach(([k, v]) => cache.set(k, v));
+  } catch { /* ignore */ }
+
+  function store() {
+    const plain = {};
+    cache.forEach((v, k) => { if (typeof v === 'object') plain[k] = v; });
+    try { localStorage.setItem(storageKey, JSON.stringify(plain)); } catch { /* ignore */ }
   }
-  climatologyRefreshing.delete(key);
-  onReady();
+
+  async function ensure(lat, lon, onReady) {
+    const key = climatologyKey(lat, lon);
+    const cached = cache.get(key);
+    if (cached === 'loading' || cached === 'error' || refreshing.has(key) ||
+        SolarModel.climatologyIsFresh(cached)) return;
+    const stale = typeof cached === 'object' ? cached : null;
+    if (stale) refreshing.add(key);
+    else cache.set(key, 'loading');
+    try {
+      const res = await fetch(urlFor(lat, lon));
+      if (!res.ok) throw new Error(`NASA POWER HTTP ${res.status}`);
+      cache.set(key, { ...parse(await res.json()), fetchedAt: new Date().toISOString() });
+      store();
+    } catch (err) {
+      console.warn(`[Solar Site] ${label} unavailable` + (stale ? ', using cached data' : '') + ':', err);
+      if (!stale) cache.set(key, 'error');
+    }
+    refreshing.delete(key);
+    onReady();
+  }
+
+  return { get: (lat, lon) => cache.get(climatologyKey(lat, lon)), ensure };
 }
+
+const climatology = powerCache('solarSite.climatology', SolarModel.powerClimatologyUrl,
+  SolarModel.parsePowerClimatology, 'satellite irradiance (using the rough estimate)');
+// Asks up to last year; years NASA has not completed yet are dropped by the parser.
+const yearlySeries = powerCache('solarSite.yearlySeries',
+  (lat, lon) => SolarModel.powerMonthlyUrl(lat, lon, new Date().getUTCFullYear() - 1),
+  (json) => ({ years: SolarModel.parsePowerMonthly(json) }), 'year-by-year irradiance');
 
 function formatRetrievedDate(iso) {
   const d = new Date(iso);
@@ -605,7 +626,7 @@ function computeSiteStats(data) {
   // Yield: from satellite irradiance when available, otherwise the old rough formula.
   const systemLoss = currentSystemLoss();
   const modelOptions = { systemLoss };
-  const clim = climatologyCache.get(climatologyKey(centerLat, centerLon));
+  const clim = climatology.get(centerLat, centerLon);
   let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null, climFetchedAt = null;
   if (clim && typeof clim === 'object') {
     const opt = optimalTiltFor(clim, centerLat, modelOptions);
@@ -626,6 +647,20 @@ function computeSiteStats(data) {
     optimalYield = estimateYield(centerLat, optTilt, facingAz) * lossScale;
     seasonal = seasonalYieldFactors(centerLat, optTilt).map(f => Math.round(f * yieldEst));
     yieldSource = clim === 'error' ? 'heuristic' : 'loading';
+  }
+
+  // Year-to-year spread: the same model run on every year since 2001, at the same
+  // orientation. Only next to the satellite yield, so both use the same physics.
+  const series = yearlySeries.get(centerLat, centerLon);
+  let variability = null;
+  if (yieldSource === 'satellite' && series && typeof series === 'object') {
+    const years = SolarModel.yearlyYields(series.years, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz, modelOptions);
+    const e = SolarModel.exceedance(years.map(y => y.annual));
+    variability = {
+      years: years.map(y => ({ year: y.year, annual: Math.round(y.annual) })),
+      p50: Math.round(e.p50), p90: Math.round(e.p90), p90Empirical: Math.round(e.p90Empirical),
+      covPct: Math.round(e.cov * 1000) / 10, first: years[0].year, last: years.at(-1).year,
+    };
   }
 
   let hull = [], area;
@@ -654,7 +689,7 @@ function computeSiteStats(data) {
   return {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
-    systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt,
+    systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, variability,
     facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
@@ -796,6 +831,32 @@ function chartTiltCurve(curve, optTilt, surveyedTilt) {
     ticks + `</svg>`;
 }
 
+// Annual yield of each year since 2001 with the P50 and P90 lines; years below
+// P90 are drawn red. Needs the year-by-year series from NASA POWER.
+function chartYearlyYield(v) {
+  if (!v) return `<div class="chart-empty">${t('charts.yearlyNeedsData')}</div>`;
+  const w = 260, h = 84, padL = 6, padR = 30, padT = 6, padB = 14;
+  const values = v.years.map(y => y.annual);
+  const lo = Math.min(...values, v.p90) * 0.97, hi = Math.max(...values) * 1.01;
+  const y = (val) => padT + (1 - (val - lo) / (hi - lo)) * (h - padT - padB);
+  const bw = (w - padL - padR) / values.length;
+  const bars = v.years.map((yr, i) => {
+    const top = y(yr.annual);
+    const fill = yr.annual < v.p90 ? '#ff5252' : '#f0c040';
+    return `<rect x="${(padL + i * bw).toFixed(1)}" y="${top.toFixed(1)}" width="${Math.max(1, bw * 0.7).toFixed(1)}" ` +
+      `height="${(h - padB - top).toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+  const line = (val, color, name) =>
+    `<line x1="${padL}" x2="${w - padR}" y1="${y(val).toFixed(1)}" y2="${y(val).toFixed(1)}" stroke="${color}" stroke-width="1" stroke-dasharray="3 2"/>` +
+    `<text x="${w - padR + 3}" y="${(y(val) + 2.5).toFixed(1)}" font-size="7" fill="${color}">${name} ${val}</text>`;
+  const ticks = [0, Math.floor((values.length - 1) / 2), values.length - 1].map(i =>
+    `<text x="${(padL + i * bw + bw * 0.35).toFixed(1)}" y="${h - 3}" font-size="7" fill="#838c90" text-anchor="middle">${v.years[i].year}</text>`).join('');
+  const label = t('aria.yearly', { values: v.years.map(yr => `${yr.year} ${yr.annual}`).join(', '), p50: v.p50, p90: v.p90 });
+  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}"${imgRole(label)}>${bars}` +
+    line(v.p50, '#e8eaeb', 'P50') + line(v.p90, '#ff5252', 'P90') + ticks + `</svg>` +
+    `<div class="bar-chart-legend"><span><i style="background:#ff5252"></i>${t('charts.yearlyBelowP90')}</span></div>`;
+}
+
 function renderCharts(stats) {
   document.getElementById('chart-rating').innerHTML = chartRatingBar(stats.counts);
   document.getElementById('chart-elevation').innerHTML = chartLineProfile(currentData.map(p => p.elevation).filter(v => v != null));
@@ -806,6 +867,7 @@ function renderCharts(stats) {
   document.getElementById('chart-compass').innerHTML = chartCompass(stats.avgAz, stats.facingAz);
   document.getElementById('chart-seasonal').innerHTML = chartSeasonalBars(stats.seasonal);
   document.getElementById('chart-tilt').innerHTML = chartTiltCurve(stats.tiltCurve, stats.optTilt, stats.avgSlope);
+  document.getElementById('chart-yearly').innerHTML = chartYearlyYield(stats.variability);
 }
 
 // CSV parsing lives in csv.js (window.SurveyCSV), with its own tests.
@@ -991,11 +1053,13 @@ function renderData(data, opts = {}) {
 
   // Fetch satellite irradiance for this site; re-render the numbers when it arrives.
   // Re-render whatever is shown by then: the same site may have been reloaded as
-  // a new array while the request was in flight, and its later ensureClimatology
-  // call returned early, so this is the only update it gets.
-  ensureClimatology(stats.centerLat, stats.centerLon, () => {
+  // a new array while the request was in flight, and its later ensure() call
+  // returned early, so this is the only update it gets.
+  const rerender = () => {
     if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
-  });
+  };
+  climatology.ensure(stats.centerLat, stats.centerLon, rerender);
+  yearlySeries.ensure(stats.centerLat, stats.centerLon, rerender);
 }
 
 // Everything that depends on the yield model, so it can refresh on its own.
@@ -1006,6 +1070,13 @@ function renderStats(data, stats) {
   document.getElementById('stat-avg-elev').textContent  = stats.avgElev  != null ? stats.avgElev.toFixed(0)  : '—';
   document.getElementById('stat-area').textContent      = stats.area > 0 ? stats.area.toLocaleString() : '—';
   document.getElementById('stat-rows').textContent      = stats.rows ?? '—';
+
+  const v = stats.variability;
+  document.getElementById('stat-p90').textContent = v ? `${v.p50.toLocaleString()} / ${v.p90.toLocaleString()}` : '—';
+  document.getElementById('stat-p90-label').textContent = v ? t('stat.p90Years', { first: v.first, last: v.last }) : t('stat.p90');
+  document.getElementById('stat-p90-card').title = v
+    ? t('stat.p90Title', { first: v.first, last: v.last, cov: v.covPct, emp: v.p90Empirical.toLocaleString() })
+    : '';
 
   const rowsCard = document.getElementById('stat-rows-card');
   rowsCard.title = stats.spacing
@@ -1109,6 +1180,12 @@ function buildInitialPrompt(stats) {
       ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (NASA POWER 2001–2020 climatology; yield via isotropic-sky transposition, ${stats.systemLossPct}% system losses, temperature derating)\n`
       : `YIELD SOURCE: rough latitude-based estimate (satellite data unavailable)\n`) +
     `SYSTEM LOSSES (user setting: wiring, inverter, soiling, mismatch): ${stats.systemLossPct}%\n` +
+    (stats.variability
+      ? `YEAR-TO-YEAR YIELD AT MEASURED ORIENTATION (same model on each year ${stats.variability.first}–${stats.variability.last}): ` +
+        `P50 ${stats.variability.p50}, P90 ${stats.variability.p90} kWh/kWp/yr (normal approximation; empirical 10th percentile ` +
+        `${stats.variability.p90Empirical}), year-to-year variation ${stats.variability.covPct}%. Weather variability only, ` +
+        `not model or data uncertainty.\n`
+      : '') +
     `SUGGESTED ROW COUNT (site tool estimate): ${stats.rows ?? 'N/A'}\n\n` +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');

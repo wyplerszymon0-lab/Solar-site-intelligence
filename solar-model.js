@@ -117,6 +117,62 @@
       `&latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&format=JSON`;
   }
 
+  // ─── Year-to-year variability ───
+  // The same parameters month by month for each year. 2001 is where NASA POWER's
+  // CERES-based irradiance starts (the source of the climatology above); earlier
+  // years come from another satellite product and would mix two records.
+  const FIRST_SERIES_YEAR = 2001;
+  const MIN_SERIES_YEARS = 10;
+  function powerMonthlyUrl(lat, lon, lastYear, firstYear = FIRST_SERIES_YEAR) {
+    return 'https://power.larc.nasa.gov/api/temporal/monthly/point' +
+      '?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DIFF,T2M&community=RE' +
+      `&latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&start=${firstYear}&end=${lastYear}&format=JSON`;
+  }
+
+  // One climatology-shaped entry per complete year: [{ year, ghi[12], diffuse[12], temp[12] }].
+  // Years with a month missing (fill value −999, or not published yet) are left out.
+  function parsePowerMonthly(json) {
+    const p = json?.properties?.parameter;
+    const names = { ghi: 'ALLSKY_SFC_SW_DWN', diffuse: 'ALLSKY_SFC_SW_DIFF', temp: 'T2M' };
+    const years = [...new Set(Object.keys(p?.ALLSKY_SFC_SW_DWN ?? {}).map(k => k.slice(0, 4)))].sort();
+    const series = [];
+    years.forEach(y => {
+      const entry = { year: Number(y) };
+      Object.entries(names).forEach(([field, name]) => {
+        entry[field] = MONTH_KEYS.map((_, m) => p?.[name]?.[y + String(m + 1).padStart(2, '0')]);
+      });
+      const complete = ['ghi', 'diffuse', 'temp'].every(f => entry[f].every(v => typeof v === 'number' && v > -900));
+      if (complete) series.push(entry);
+    });
+    if (series.length < MIN_SERIES_YEARS) {
+      throw new Error(`NASA POWER returned ${series.length} complete years for this location; at least ${MIN_SERIES_YEARS} are needed`);
+    }
+    return series;
+  }
+
+  // Annual yield of every year in the series, at one tilt and azimuth.
+  function yearlyYields(series, lat, tilt, compassAz, options = {}) {
+    return series.map(y => ({ year: y.year, annual: monthlyYield(y, lat, tilt, compassAz, options).annual }));
+  }
+
+  // Spread of annual yields across years. P50 and P90 follow the usual convention in
+  // PV energy assessments, a normal distribution: P50 = mean, P90 = mean − 1.2816 σ
+  // (σ = sample standard deviation). The empirical 10th percentile is given too, as a
+  // check on that assumption. This is weather variability only: it leaves out the
+  // uncertainty of the model and of the satellite data, which a bank's P90 adds.
+  const Z_P90 = 1.2816;
+  function exceedance(values) {
+    const n = values.length;
+    if (n < 2) throw new Error('need at least two years');
+    const mean = values.reduce((s, v) => s + v, 0) / n;
+    const sd = Math.sqrt(values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1));
+    const sorted = [...values].sort((a, b) => a - b);
+    const h = (n - 1) * 0.1; // linear interpolation between order statistics
+    const lo = Math.floor(h);
+    const p90Empirical = sorted[lo] + (h - lo) * (sorted[Math.min(lo + 1, n - 1)] - sorted[lo]);
+    return { n, mean, sd, cov: sd / mean, p50: mean, p90: mean - Z_P90 * sd, p90Empirical, min: sorted[0], max: sorted[n - 1] };
+  }
+
   // User-entered system losses in percent (input field or localStorage) as a
   // fraction for monthlyYield. Anything unusable falls back to the default;
   // values are clamped to 0–40%, beyond which the setting is surely a typo.
@@ -140,6 +196,7 @@
 
   const api = {
     beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
+    powerMonthlyUrl, parsePowerMonthly, yearlyYields, exceedance, FIRST_SERIES_YEAR,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
