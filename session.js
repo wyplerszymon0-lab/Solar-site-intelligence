@@ -7,7 +7,7 @@
 (function (root) {
   const LAST_SESSION_KEY = 'solarSite.lastSession';
   // Left alone on purpose: saved analyses, the remembered API key, language, system losses.
-  const KEPT_KEYS = ['solarSite.history', 'solarSite.apiKey', 'solarSite.lang', 'solarSite.systemLossPct', 'solarSite.crs'];
+  const KEPT_KEYS = ['solarSite.history', 'solarSite.apiKey', 'solarSite.lang', 'solarSite.systemLossPct', 'solarSite.crs', 'solarSite.economics'];
 
   /**
    * Forget the auto-restored dataset. `storage` is localStorage-like, `loc` and

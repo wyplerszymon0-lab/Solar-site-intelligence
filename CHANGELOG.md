@@ -21,6 +21,10 @@ All notable changes to this project are documented here. The format follows
   for every year since 2001; P50, P90 (normal approximation, empirical 10th percentile as
   a check) and a chart of each year. Warsaw at 35° S: P50 990, P90 936 kWh/kWp, 4.2%
   year-to-year variation. Weather variability only (#29).
+- **Economics per kWp, in any currency:** with your investment, energy value and real
+  discount rate, the app shows first-year revenue, LCOE, payback, NPV and IRR for the P50
+  and the P90 yield; defaults only for degradation (0.5 %/yr) and lifetime (25 years)
+  (`economics.js`, #31).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:

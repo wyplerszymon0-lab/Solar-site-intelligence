@@ -152,6 +152,22 @@ As a consistency check, the mean of the yearly runs over 2001–2020 (Warsaw: 98
 
 **What this P90 is not.** It is weather variability only. A bankable P90 also folds in the uncertainty of the yield model (see the PVGIS comparison above) and of the satellite irradiance, typically a few percent each, which would push it lower. Years NASA has not completed yet are left out.
 
+## Economics (per kWp, your prices)
+
+Prices differ by country and change every year, so the app does not guess them: enter the investment per kWp, what a kWh is worth to you (a tariff, a PPA price or the retail price you avoid) and a real discount rate, in any currency. Everything is per kWp, so no plant size is assumed ([`economics.js`](economics.js)).
+
+With yield *Y* (kWh/kWp in year 1), degradation *d*, O&M cost *M* per year, price *p*, investment *C*, real discount rate *r* and lifetime *L*:
+
+- energy in year *t*: *E<sub>t</sub>* = *Y* (1 − *d*)<sup>*t*−1</sup>; cash in year *t*: *E<sub>t</sub> p* − *M*
+- **LCOE** = (*C* + Σ *M* / (1+*r*)<sup>*t*</sup>) / Σ *E<sub>t</sub>* / (1+*r*)<sup>*t*</sup>: selling at the LCOE gives NPV = 0, which the tests check
+- **NPV** at *r*, **IRR** (the rate where NPV = 0, by bisection; negative for a project that never earns its investment back), **payback** (years until the cumulative cash turns positive, interpolated within the year)
+
+Each is shown for the **P50** and the **P90** yield (see above). P90 applies a poor year's yield to every year, so it is a cautious case rather than a forecast.
+
+Defaults only where a typical value is defensible: degradation **0.5 % a year** (the median of field measurements in Jordan & Kurtz, "Photovoltaic Degradation Rates — an Analytical Review", NREL 2013) and a **25-year** lifetime (the usual module performance warranty). O&M defaults to 0. Investment, energy value and discount rate have no default.
+
+Left out: taxes and depreciation, subsidies, loans and their terms, inflation beyond the real rate, inverter replacement, decommissioning, and any change in the value of energy over time.
+
 ## A note on the heuristic estimates
 
 Row spacing, shading risk and outlier detection are **rough, client-side approximations** built from the uploaded lat/lon/elevation/slope/azimuth alone — there's no true 3D shading model and no soil or grid-connection analysis behind them. Treat them as a quick first read, not a substitute for a proper site assessment.
