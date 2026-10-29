@@ -151,7 +151,9 @@ In the yield model, hours when the sun is below the skyline add no beam irradian
 | Lisbon (demo) | 1.3° | 2.2° / 2.3° |
 | Warsaw (flat) | 1.1° | 1.4° / 1.1° |
 
-The skyline comes out slightly low in valleys: with 12 distances, some ridge crests fall between samples. A denser distance scheme tried at Zermatt and Innsbruck did not improve it within the same budget.
+The skyline comes out slightly low in valleys: with 12 distances, some ridge crests fall between samples. A denser 1–10 km scheme with 36 directions (same 577 heights), tried only at Zermatt, gave 1.8° instead of 2.0°: too little to give up PVGIS's 7.5° step.
+
+The fixtures behind the tests are recorded with `node tools/make-horizon-fixtures.mjs terrain|physics`.
 
 Yield loss with **PVGIS's own horizon** as input (35° south, 14% losses), compared with PVGIS run with and without its horizon:
 

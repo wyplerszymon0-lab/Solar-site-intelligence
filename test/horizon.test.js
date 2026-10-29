@@ -98,3 +98,13 @@ test('yield loss from a skyline matches PVGIS within ~2 points at five mountain 
   const mean = gaps.reduce((a, b) => a + b) / gaps.length;
   assert.ok(mean < 2, `mean gap ${mean.toFixed(2)} points`); // 1.7 when written
 });
+
+test('skyline from recorded Copernicus DEM heights at Zermatt is within ~2° of PVGIS', () => {
+  const f = require('./fixtures/horizon-zermatt.json');
+  const ours = H.profileFromElevations(f.elevations);
+  const rmse = Math.sqrt(ours.reduce((s, v, i) => s + (v - f.pvgis[i]) ** 2, 0) / ours.length);
+  const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+  assert.ok(rmse < 2.5, `RMSE ${rmse.toFixed(2)}°`); // 2.03° when recorded
+  assert.ok(Math.abs(mean(ours) - mean(f.pvgis)) < 1, `${mean(ours)} vs ${mean(f.pvgis)}`);
+  assert.ok(Math.max(...ours) > 30); // the Matterhorn side
+});

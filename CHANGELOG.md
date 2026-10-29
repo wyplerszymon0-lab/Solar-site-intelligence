@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format follows
   discount rate, the app shows first-year revenue, LCOE, payback, NPV and IRR for the P50
   and the P90 yield; defaults only for degradation (0.5 %/yr) and lifetime (25 years)
   (`economics.js`, #31).
+- **Horizon shading from terrain, worldwide:** on request, 577 Copernicus DEM heights
+  (Open-Meteo) around the site give the skyline in 48 directions; the sun below it gives
+  no beam, in every yield the app shows. Skyline within 1.1–2.0° of PVGIS, shading loss
+  within 1.7 points of PVGIS on average at five mountain sites (`horizon.js`, #33).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:
