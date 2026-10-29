@@ -134,7 +134,37 @@ The previous formula only knew latitude and happened to be calibrated around Lis
 
 Adding glass reflection losses was a trade-off, kept because it is physically correct and PVGIS models it too: it cut the error for east, west, north-facing and flat arrays from 4.4–9.0% to 0.6–5.2%, but moved well-oriented arrays from a mixed ±3% to a consistently low −0.5…−6.8% (mean 4.2%). The remaining low bias for optimal orientations likely comes from differences between NASA POWER's and PVGIS's irradiance data; it was not tuned away.
 
-**Known limits.** No horizon or near-object shading. The optimal tilt comes out 1–3° below PVGIS's (Warsaw 36° vs 39°), though yield is flat near the optimum. NASA POWER's resolution is ~0.5–1°, so coastal and mountain sites mix neighbouring climates.
+**Known limits.** No near-object shading (buildings, trees); terrain shading is optional (below). The optimal tilt comes out 1–3° below PVGIS's (Warsaw 36° vs 39°), though yield is flat near the optimum. NASA POWER's resolution is ~0.5–1°, so coastal and mountain sites mix neighbouring climates.
+
+### Horizon shading from terrain
+
+Mountains and hills block the low sun. **Compute horizon from terrain** samples the ground around the site centre in 48 directions (every 7.5°, PVGIS's step) at 12 distances from 100 m to 25 km, spaced geometrically, and takes the steepest elevation angle in each direction after Earth curvature and refraction (*d*²(1 − 0.13) / 2*R*: a peak 25 km away sits ~43 m lower than on a flat Earth). Heights come from the **Open-Meteo elevation API** (Copernicus DEM GLO-90, global, callable from the browser) ([`horizon.js`](horizon.js)). The free service allows about 600 heights a minute and a few thousand an hour per visitor, so the 577 heights for one site are fetched only on request and kept in this browser.
+
+In the yield model, hours when the sun is below the skyline add no beam irradiance to the plane. Every yield in the app then includes the horizon: the measured orientation, the optimal tilt, P50/P90 and the economics. The chart shows the skyline with the sun's path on 21 June and 21 December.
+
+**Validation against PVGIS**, in two separate parts so the terrain data and the physics can each be judged:
+
+| Site | Skyline vs PVGIS `printhorizon` (RMSE) | Mean skyline, ours / PVGIS |
+|------|------|------|
+| Zermatt (Alps) | 2.0° | 19.6° / 20.2° |
+| Innsbruck (Inn valley) | 2.0° | 8.0° / 9.6° |
+| Lisbon (demo) | 1.3° | 2.2° / 2.3° |
+| Warsaw (flat) | 1.1° | 1.4° / 1.1° |
+
+The skyline comes out slightly low in valleys: with 12 distances, some ridge crests fall between samples. A denser distance scheme tried at Zermatt and Innsbruck did not improve it within the same budget.
+
+Yield loss with **PVGIS's own horizon** as input (35° south, 14% losses), compared with PVGIS run with and without its horizon:
+
+| Site | Mean skyline | PVGIS | This model, beam shaded | Beam and sky diffuse shaded |
+|------|------|------|------|------|
+| Zermatt | 20.2° | −14.0% | −10.3% | −15.1% |
+| Innsbruck | 9.5° | −1.5% | −2.2% | −3.5% |
+| Chamonix | 18.9° | −8.9% | −11.6% | −15.7% |
+| Hallstatt | 22.5° | −15.8% | −14.6% | −21.4% |
+| Bergen | 7.7° | −4.3% | −4.5% | −5.5% |
+| Lisbon, Warsaw | 2.2°, 1.1° | 0.0%, 0.0% | −0.4%, −0.2% | −0.4%, −0.3% |
+
+Shading only the beam is within 1.7 percentage points of PVGIS on average at the five mountain sites; also removing the isotropic diffuse sky behind the skyline doubled the gap (3.3 points), so only the beam is shaded. That choice was made on this comparison, so these five sites are not an independent test of it. The diffuse light from the hidden sky is still counted, which is physically optimistic in deep valleys.
 
 ### Year-to-year variability (P50 / P90)
 

@@ -108,6 +108,17 @@ const I18N = {
     'econ.never': 'not within lifetime',
     'econ.years': '{n} yr',
     'econ.resultNote': '{years} years, {deg}% degradation a year. P90 uses the yield of a poor year (1 in 10) every year: a cautious case, not a forecast.',
+    'charts.horizon': 'Horizon and Sun Path',
+    'charts.horizonSkyline': 'skyline',
+    'horizon.btn': '⛰ Compute horizon from terrain',
+    'horizon.open': 'Open horizon assumed. Computing it uses 577 terrain heights (Copernicus DEM via Open-Meteo), about a minute of the free service.',
+    'horizon.computed': 'Horizon computed; it applies once satellite irradiance is in.',
+    'horizon.loss': 'Terrain shading: {pct}% yield at the surveyed orientation (skyline up to {max}°). All yields above include it.',
+    'horizon.progress': 'Fetching terrain heights… {done}/{total}',
+    'horizon.limit': 'The free terrain service allows about 600 heights a minute. Try again in a minute.',
+    'horizon.error': 'Terrain heights unavailable: ',
+    'aria.horizon': 'Skyline around the site, up to {max} degrees, with the sun path on 21 June and 21 December',
+    'aria.horizonOpen': 'Sun path on 21 June and 21 December over an open horizon',
     'export.csv': '↓ CSV',
     'export.geojson': '↓ GeoJSON',
     'export.pdf': '🖨 PDF Report',
@@ -274,6 +285,17 @@ const I18N = {
     'econ.never': 'nie w okresie życia',
     'econ.years': '{n} lat',
     'econ.resultNote': '{years} lat, degradacja {deg}% rocznie. P90 zakłada uzysk słabego roku (1 na 10) co roku: wariant ostrożny, nie prognoza.',
+    'charts.horizon': 'Horyzont i droga słońca',
+    'charts.horizonSkyline': 'linia horyzontu',
+    'horizon.btn': '⛰ Policz horyzont z terenu',
+    'horizon.open': 'Założony otwarty horyzont. Policzenie go zużywa 577 wysokości terenu (Copernicus DEM przez Open-Meteo), około minuty darmowego limitu.',
+    'horizon.computed': 'Horyzont policzony; zadziała, gdy dojdą dane satelitarne.',
+    'horizon.loss': 'Zacienienie od terenu: {pct}% uzysku przy zmierzonej orientacji (horyzont do {max}°). Wszystkie uzyski wyżej je uwzględniają.',
+    'horizon.progress': 'Pobieranie wysokości terenu… {done}/{total}',
+    'horizon.limit': 'Darmowa usługa pozwala na ok. 600 wysokości na minutę. Spróbuj ponownie za minutę.',
+    'horizon.error': 'Wysokości terenu niedostępne: ',
+    'aria.horizon': 'Linia horyzontu wokół działki, do {max} stopni, z drogą słońca 21 czerwca i 21 grudnia',
+    'aria.horizonOpen': 'Droga słońca 21 czerwca i 21 grudnia nad otwartym horyzontem',
     'export.csv': '↓ CSV',
     'export.geojson': '↓ GeoJSON',
     'export.pdf': '🖨 Raport PDF',
@@ -675,6 +697,53 @@ const yearlySeries = powerCache('solarSite.yearlySeries',
   (lat, lon) => SolarModel.powerMonthlyUrl(lat, lon, new Date().getUTCFullYear() - 1),
   (json) => ({ years: SolarModel.parsePowerMonthly(json) }), 'year-by-year irradiance');
 
+// ─── Horizon from terrain (Open-Meteo elevations, on request) ───
+// 577 elevations per site, about the per-minute allowance of the free API, so it
+// runs only when the user asks and is kept in this browser per site (~100 m key).
+
+const HORIZON_STORAGE = 'solarSite.horizon';
+const horizonKey = (lat, lon) => `${lat.toFixed(3)},${lon.toFixed(3)}`;
+const horizonStore = (() => {
+  try { return JSON.parse(localStorage.getItem(HORIZON_STORAGE) || '{}'); } catch { return {}; }
+})();
+
+function siteHorizon(lat, lon) {
+  const entry = horizonStore[horizonKey(lat, lon)];
+  return Array.isArray(entry?.profile) && entry.profile.length === SiteHorizon.DIRECTIONS ? entry.profile : null;
+}
+
+// onProgress(done, total) after each request. Throws with a message for the user.
+async function computeHorizon(lat, lon, onProgress) {
+  const urls = SiteHorizon.elevationUrls(SiteHorizon.samplePoints(lat, lon));
+  const elevations = [];
+  for (const [i, url] of urls.entries()) {
+    const res = await fetch(url);
+    if (res.status === 429) throw new Error(t('horizon.limit'));
+    if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
+    elevations.push(...(await res.json()).elevation);
+    onProgress(i + 1, urls.length);
+  }
+  const profile = SiteHorizon.profileFromElevations(elevations);
+  horizonStore[horizonKey(lat, lon)] = { profile, fetchedAt: new Date().toISOString() };
+  try { localStorage.setItem(HORIZON_STORAGE, JSON.stringify(horizonStore)); } catch { /* ignore */ }
+  return profile;
+}
+
+document.getElementById('horizon-btn').addEventListener('click', async (e) => {
+  if (!currentData.length) return;
+  const btn = e.currentTarget, status = document.getElementById('horizon-status');
+  const { centerLat, centerLon } = computeSiteStats(currentData);
+  btn.disabled = true;
+  try {
+    await computeHorizon(centerLat, centerLon, (done, total) => { status.textContent = t('horizon.progress', { done, total }); });
+    renderStats(currentData, computeSiteStats(currentData));
+  } catch (err) {
+    console.warn('[Solar Site] horizon unavailable:', err);
+    status.textContent = err.message === t('horizon.limit') ? err.message : t('horizon.error') + err.message;
+  }
+  btn.disabled = false;
+});
+
 function formatRetrievedDate(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
@@ -713,9 +782,11 @@ function computeSiteStats(data) {
 
   // Yield: from satellite irradiance when available, otherwise the old rough formula.
   const systemLoss = currentSystemLoss();
-  const modelOptions = { systemLoss };
+  const horizon = siteHorizon(centerLat, centerLon);
+  const modelOptions = { systemLoss, horizon }; // every yield below sees the skyline, once computed
   const clim = climatology.get(centerLat, centerLon);
   let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null, climFetchedAt = null;
+  let horizonLossPct = null;
   if (clim && typeof clim === 'object') {
     const opt = optimalTiltFor(clim, centerLat, modelOptions);
     optTilt = opt.tilt;
@@ -724,6 +795,10 @@ function computeSiteStats(data) {
     const site = SolarModel.monthlyYield(clim, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz, modelOptions);
     yieldEst = Math.round(site.annual);
     seasonal = site.monthly.map(Math.round);
+    if (horizon) {
+      const open = SolarModel.monthlyYield(clim, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz, { systemLoss }).annual;
+      horizonLossPct = Math.round((site.annual / open - 1) * 1000) / 10;
+    }
     ghiAnnual = Math.round(clim.ghi.reduce((s, v, m) => s + v * [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m], 0));
     yieldSource = 'satellite';
     climFetchedAt = clim.fetchedAt ?? null; // null for entries cached before timestamps existed
@@ -777,7 +852,7 @@ function computeSiteStats(data) {
   const stats = {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
-    systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, variability,
+    systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, variability, horizon, horizonLossPct,
     facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
@@ -947,6 +1022,53 @@ function chartYearlyYield(v) {
     `<div class="bar-chart-legend"><span><i style="background:#ff5252"></i>${t('charts.yearlyBelowP90')}</span></div>`;
 }
 
+// Skyline (grey) and the sun's path on 21 June and 21 December, compass on the
+// x axis centred on the equator-facing direction. Without a computed horizon only
+// the sun paths are drawn, over an open horizon.
+function chartHorizon(horizon, lat) {
+  const w = 260, h = 90, padL = 6, padR = 6, padT = 6, padB = 14;
+  const centre = lat >= 0 ? 180 : 0;
+  const x = (az) => padL + (((az - centre + 540) % 360) / 360) * (w - padL - padR);
+  const paths = [[172, '#f0c040', '21 Jun'], [355, '#5ab0ff', '21 Dec']].map(([n, color, name]) => ({ path: SolarModel.sunPath(lat, n), color, name }));
+  const top = Math.min(90, Math.max(30, ...paths.flatMap(p => p.path.map(s => s.elevation)), ...(horizon || [0])) + 5);
+  const y = (el) => padT + (1 - el / top) * (h - padT - padB);
+  let skyline = '';
+  if (horizon) {
+    // Walk the compass from the left edge (opposite the centre) so the polygon does not wrap.
+    const step = 360 / horizon.length, pts = [];
+    for (let k = 0; k <= horizon.length; k++) {
+      const az = (centre + 180 + k * step) % 360;
+      pts.push(`${(k === horizon.length ? w - padR : x(az)).toFixed(1)},${y(SolarModel.horizonAt(horizon, az)).toFixed(1)}`);
+    }
+    skyline = `<polygon points="${padL},${y(0)} ${pts.join(' ')} ${w - padR},${y(0)}" fill="#838c90" fill-opacity="0.55"/>`;
+  }
+  const sun = paths.map(({ path, color }) => {
+    // Break the line where it crosses the chart's edge (only near the poles).
+    const segs = [[]];
+    path.forEach((s, i) => {
+      if (i && Math.abs(x(s.compassAz) - x(path[i - 1].compassAz)) > (w - padL - padR) / 2) segs.push([]);
+      segs.at(-1).push(`${x(s.compassAz).toFixed(1)},${y(s.elevation).toFixed(1)}`);
+    });
+    return segs.filter(sg => sg.length > 1).map(sg => `<polyline points="${sg.join(' ')}" fill="none" stroke="${color}" stroke-width="1.2"/>`).join('');
+  }).join('');
+  const ticks = [['N', 0], ['E', 90], ['S', 180], ['W', 270]].map(([name, az]) =>
+    `<text x="${x(az).toFixed(1)}" y="${h - 3}" font-size="7" fill="#838c90" text-anchor="middle">${name}</text>`).join(''); // same letters as the compass chart
+  const maxH = horizon ? Math.max(...horizon) : 0;
+  const label = horizon ? t('aria.horizon', { max: maxH.toFixed(1) }) : t('aria.horizonOpen');
+  return `<svg class="site-chart-svg" viewBox="0 0 ${w} ${h}"${imgRole(label)}>` +
+    `<line x1="${padL}" x2="${w - padR}" y1="${y(0)}" y2="${y(0)}" stroke="#2c3438"/>${skyline}${sun}${ticks}</svg>` +
+    `<div class="bar-chart-legend">${paths.map(p => `<span><i style="background:${p.color}"></i>${p.name}</span>`).join('')}` +
+    (horizon ? `<span><i style="background:#838c90"></i>${t('charts.horizonSkyline')}</span>` : '') + `</div>`;
+}
+
+function renderHorizonStatus(stats) {
+  const el = document.getElementById('horizon-status');
+  if (!stats.horizon) { el.textContent = t('horizon.open'); return; }
+  el.textContent = stats.horizonLossPct == null
+    ? t('horizon.computed')
+    : t('horizon.loss', { pct: stats.horizonLossPct.toFixed(1), max: Math.max(...stats.horizon).toFixed(1) });
+}
+
 function renderCharts(stats) {
   document.getElementById('chart-rating').innerHTML = chartRatingBar(stats.counts);
   document.getElementById('chart-elevation').innerHTML = chartLineProfile(currentData.map(p => p.elevation).filter(v => v != null));
@@ -958,6 +1080,8 @@ function renderCharts(stats) {
   document.getElementById('chart-seasonal').innerHTML = chartSeasonalBars(stats.seasonal);
   document.getElementById('chart-tilt').innerHTML = chartTiltCurve(stats.tiltCurve, stats.optTilt, stats.avgSlope);
   document.getElementById('chart-yearly').innerHTML = chartYearlyYield(stats.variability);
+  document.getElementById('chart-horizon').innerHTML = chartHorizon(stats.horizon, stats.centerLat);
+  renderHorizonStatus(stats);
 }
 
 // CSV parsing lives in csv.js (window.SurveyCSV), with its own tests.
@@ -1304,6 +1428,11 @@ function buildInitialPrompt(stats) {
         `not model or data uncertainty.\n`
       : '') +
     (stats.economics ? economicsPromptLine(stats.economics) : '') +
+    (stats.horizon && stats.horizonLossPct != null
+      ? `TERRAIN HORIZON (Copernicus DEM, 48 directions to 25 km; beam blocked below the skyline, all yields above include it): ` +
+        `highest ${Math.max(...stats.horizon).toFixed(1)}°, mean ${(stats.horizon.reduce((s, v) => s + v, 0) / stats.horizon.length).toFixed(1)}°, ` +
+        `yield ${stats.horizonLossPct.toFixed(1)}% vs an open horizon.\n`
+      : `HORIZON: open horizon assumed (terrain shading not computed).\n`) +
     `SUGGESTED ROW COUNT (site tool estimate): ${stats.rows ?? 'N/A'}\n\n` +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');
