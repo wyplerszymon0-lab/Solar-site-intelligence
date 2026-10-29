@@ -23,6 +23,7 @@
     cellTempRise: 20,        // cell above ambient while producing, °C (≈ NOCT behaviour)
     groundAlbedo: 0.2,       // standard ground reflectance; NASA's 1° cell albedo is skewed by nearby sea
     iamB0: 0.05,             // ASHRAE incidence-angle modifier for glass-covered modules; 0 disables it
+    horizon: null,           // skyline profile (see horizonAt); null = open horizon
   };
 
   function declination(n) {
@@ -42,10 +43,39 @@
   const skyIncidenceDeg = (tilt) => 59.7 - 0.1388 * tilt + 0.001497 * tilt * tilt;
   const groundIncidenceDeg = (tilt) => 90 - 0.5788 * tilt + 0.002693 * tilt * tilt;
 
+  // ─── Horizon ───
+  // A horizon profile is the elevation angle of the skyline, in degrees, at equally
+  // spaced compass azimuths starting at north (index 0 = 0°, then clockwise).
+  // horizonAt() interpolates it linearly, wrapping round at north.
+  function horizonAt(horizon, compassAz) {
+    const n = horizon.length, step = 360 / n;
+    const x = ((compassAz % 360) + 360) % 360 / step;
+    const i = Math.floor(x) % n, f = x - Math.floor(x);
+    return horizon[i] * (1 - f) + horizon[(i + 1) % n] * f;
+  }
+
+  // Sun elevation and compass azimuth (°) on day n at hour angle w (°, 0 = solar noon),
+  // every stepDeg of hour angle while the sun is up: for drawing the sun's path.
+  function sunPath(lat, n, stepDeg = 2.5) {
+    const phi = lat * DEG, d = declination(n) * DEG, path = [];
+    for (let w = -180; w <= 180; w += stepDeg) {
+      const omega = w * DEG;
+      const sinAlt = Math.cos(phi) * Math.cos(d) * Math.cos(omega) + Math.sin(phi) * Math.sin(d);
+      if (sinAlt <= 0) continue;
+      const azS = Math.atan2(Math.sin(omega) * Math.cos(d), Math.sin(phi) * Math.cos(d) * Math.cos(omega) - Math.cos(phi) * Math.sin(d));
+      path.push({ elevation: Math.asin(sinAlt) / DEG, compassAz: ((azS / DEG + 180) % 360 + 360) % 360 });
+    }
+    return path;
+  }
+
   // Ratio of daily beam irradiation on the tilted surface to that on the horizontal,
-  // optionally after glass reflection losses (b0 > 0).
+  // optionally after glass reflection losses (b0 > 0). With a horizon profile, hours
+  // when the sun is below the skyline add nothing to the plane; the horizontal sum
+  // stays unshaded, because the satellite irradiance it scales is for open terrain.
+  // Only the beam is shaded: also removing the sky behind the skyline from the
+  // isotropic diffuse doubled the gap to PVGIS at five mountain sites (README).
   // tilt in degrees; compassAz in degrees (0 = N, 90 = E, 180 = S).
-  function beamTiltFactor(lat, tilt, compassAz, n, b0 = 0) {
+  function beamTiltFactor(lat, tilt, compassAz, n, b0 = 0, horizon = null) {
     const phi = lat * DEG, beta = tilt * DEG;
     const gamma = (compassAz - 180) * DEG; // surface azimuth from south, west positive
     const d = declination(n) * DEG;
@@ -61,6 +91,11 @@
         Math.cos(d) * Math.sin(phi) * Math.sin(beta) * Math.cos(gamma) * Math.cos(omega) +
         Math.cos(d) * Math.sin(beta) * Math.sin(gamma) * Math.sin(omega);
       onHorizontal += cosZ;
+      if (horizon) {
+        // Sun azimuth from south, west positive, then as a compass bearing.
+        const azS = Math.atan2(Math.sin(omega) * Math.cos(d), Math.sin(phi) * Math.cos(d) * Math.cos(omega) - Math.cos(phi) * Math.sin(d));
+        if (Math.asin(Math.min(1, cosZ)) / DEG < horizonAt(horizon, azS / DEG + 180)) continue;
+      }
       onPlane += Math.max(0, cosT) * (b0 > 0 ? incidenceModifier(cosT, b0) : 1);
     }
     return onHorizontal > 0 ? onPlane / onHorizontal : 0;
@@ -71,12 +106,12 @@
   function monthlyYield(climatology, lat, tilt, compassAz, options = {}) {
     const o = { ...DEFAULTS, ...options };
     const cosB = Math.cos(tilt * DEG);
-    const kSky = o.iamB0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), o.iamB0) : 1;
+    const kSky = (o.iamB0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), o.iamB0) : 1);
     const kGround = o.iamB0 > 0 ? incidenceModifier(Math.cos(groundIncidenceDeg(tilt) * DEG), o.iamB0) : 1;
     const months = MEAN_DAY.map((n, m) => {
       const H = climatology.ghi[m];
       const Hd = Math.min(climatology.diffuse[m], H);
-      const Rb = beamTiltFactor(lat, tilt, compassAz, n, o.iamB0);
+      const Rb = beamTiltFactor(lat, tilt, compassAz, n, o.iamB0, o.horizon);
       const poaDaily = (H - Hd) * Rb + Hd * (1 + cosB) / 2 * kSky + H * o.groundAlbedo * (1 - cosB) / 2 * kGround;
       const cellTemp = climatology.temp[m] + o.cellTempRise;
       const tempFactor = 1 + o.tempCoeff * (cellTemp - 25);
@@ -196,7 +231,7 @@
 
   const api = {
     beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
-    powerMonthlyUrl, parsePowerMonthly, yearlyYields, exceedance, FIRST_SERIES_YEAR,
+    powerMonthlyUrl, parsePowerMonthly, yearlyYields, exceedance, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

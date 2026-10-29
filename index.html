@@ -287,6 +287,12 @@
         <div class="chart-title" data-i18n="charts.yearly">Annual Yield by Year</div>
         <div id="chart-yearly"></div>
       </div>
+      <div class="chart-block">
+        <div class="chart-title" data-i18n="charts.horizon">Horizon and Sun Path</div>
+        <div id="chart-horizon"></div>
+        <button class="btn btn-ghost" id="horizon-btn" style="margin-top:8px" data-i18n="horizon.btn">⛰ Compute horizon from terrain</button>
+        <div class="key-note" id="horizon-status" aria-live="polite"></div>
+      </div>
     </div>
 
     <!-- MEASUREMENT POINTS TABLE -->
@@ -375,6 +381,7 @@
 <script src="crs.js"></script>
 <script src="csv.js"></script>
 <script src="geometry.js"></script>
+<script src="horizon.js"></script>
 <script src="export.js"></script>
 <script src="session.js"></script>
 <script src="app.js"></script>
