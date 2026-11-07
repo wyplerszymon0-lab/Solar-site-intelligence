@@ -59,6 +59,85 @@ test('annual yield is within 6% of PVGIS for off-optimal orientations', () => {
   }
 });
 
+// ─── Sky models (issue #35) ───
+
+// Madrid and Johannesburg were in the README's PVGIS table but had no fixture; PVGIS
+// PVcalc 5.3 (SARAH3) at these coordinates gives the same values, retrieved 2026-11-07.
+// Their NASA fixtures are the 2001–2025 climatology, the others 2001–2020.
+const PVGIS_ALL = [
+  ...PVGIS,
+  { name: 'madrid', lat: 40.42, tilt: 36, az: 180, kwh: 1619.51 },
+  { name: 'johannesburg', lat: -26.2, tilt: 24, az: 0, kwh: 1728.49 },
+];
+const ALL_CASES = [
+  ...PVGIS_ALL.map(r => ({ ...r, optimal: true })),
+  ...PVGIS_OFF_OPTIMAL.map(r => ({ ...r, name: 'lisbon', lat: 38.72, optimal: false })),
+];
+const errors = (skyModel, cases = ALL_CASES) =>
+  cases.map(r => M.monthlyYield(clim(r.name), r.lat, r.tilt, r.az, { skyModel }).annual / r.kwh - 1);
+const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+test('extraterrestrial irradiation matches Duffie & Beckman and is 0 in polar night', () => {
+  // Example 1.10.1: 43° N on 15 April, H0 = 33.8 MJ/m².
+  assert.ok(Math.abs(M.extraterrestrialDaily(43, 105) * 3.6 - 33.8) < 0.1);
+  assert.equal(M.extraterrestrialDaily(80, 355), 0);
+  assert.ok(M.extraterrestrialDaily(-80, 355) > 0); // polar day in the south
+  // Same sun height six months apart on the other hemisphere (orbit distance aside).
+  const n = M.extraterrestrialDaily(35, 17), s = M.extraterrestrialDaily(-35, 198);
+  assert.ok(Math.abs(n / s - 1) < 0.08, `${n} vs ${s}`);
+});
+
+test('Hay–Davies equals isotropic under a fully overcast sky and on a flat panel', () => {
+  const c = clim('warsaw');
+  const overcast = { ...c, ghi: c.diffuse }; // no beam: anisotropy index A = 0
+  for (const [tilt, az] of [[47, 180], [35, 90], [15, 0]]) {
+    const iso = M.monthlyYield(overcast, 52.23, tilt, az, { skyModel: 'isotropic' }).annual;
+    const hd = M.monthlyYield(overcast, 52.23, tilt, az, { skyModel: 'hay-davies' }).annual;
+    assert.ok(Math.abs(hd - iso) < 1e-9, `${tilt}/${az}: ${hd} vs ${iso}`);
+  }
+  // Flat: circumsolar light arrives like beam, and R_b for a flat panel is 1, so only
+  // glass reflection can differ, and only slightly.
+  const flatIso = M.monthlyYield(c, 52.23, 0, 180, { skyModel: 'isotropic', iamB0: 0 }).annual;
+  const flatHd = M.monthlyYield(c, 52.23, 0, 180, { skyModel: 'hay-davies', iamB0: 0 }).annual;
+  assert.ok(Math.abs(flatHd - flatIso) < 1e-9, `${flatHd} vs ${flatIso}`);
+});
+
+test('Hay–Davies is the default, and an unknown sky model is refused', () => {
+  assert.equal(M.DEFAULTS.skyModel, 'hay-davies');
+  assert.deepEqual(M.SKY_MODELS, ['isotropic', 'hay-davies']);
+  assert.throws(() => M.monthlyYield(clim('lisbon'), 38.72, 35, 180, { skyModel: 'perez' }), /unknown sky model/);
+});
+
+test('both sky models stay within 7% of PVGIS on all eleven cases', () => {
+  // Largest when written: isotropic −6.8% (Warsaw), Hay–Davies +6.1% (Oslo, where
+  // NASA's horizontal irradiation is 2.5% above PVGIS's) and +6.0% (Lisbon east).
+  for (const skyModel of M.SKY_MODELS) {
+    errors(skyModel).forEach((e, i) => {
+      const r = ALL_CASES[i];
+      assert.ok(Math.abs(e) < 0.07, `${skyModel} ${r.name} ${r.tilt}/${r.az}: ${(e * 100).toFixed(1)}%`);
+    });
+  }
+});
+
+test('Hay–Davies removes the low bias for equator-facing arrays and lowers the mean error', () => {
+  const optimal = ALL_CASES.filter(r => r.optimal);
+  const bias = (s) => mean(errors(s, optimal));
+  const mae = (s) => mean(errors(s).map(Math.abs));
+  // When written: bias −3.8% → −0.2%, mean absolute error over 11 cases 3.6% → 2.8%.
+  assert.ok(bias('isotropic') < -0.03, `isotropic bias ${bias('isotropic')}`);
+  assert.ok(Math.abs(bias('hay-davies')) < 0.01, `Hay–Davies bias ${bias('hay-davies')}`);
+  assert.ok(mae('hay-davies') < mae('isotropic') - 0.005, `${mae('hay-davies')} vs ${mae('isotropic')}`);
+});
+
+test('Hay–Davies moves the optimal tilt up to PVGIS\'s (Warsaw: 39°)', () => {
+  const peak = (skyModel) => {
+    const curve = M.tiltCurve(clim('warsaw'), 52.23, 180, 75, { skyModel });
+    return curve.indexOf(Math.max(...curve));
+  };
+  assert.equal(peak('isotropic'), 36);
+  assert.equal(peak('hay-davies'), 39);
+});
+
 test('glass reflection losses cost more for steep incidence than for optimal orientation', () => {
   const loss = (tilt, az) => {
     const on = M.monthlyYield(clim('lisbon'), 38.72, tilt, az).annual;

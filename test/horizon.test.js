@@ -60,14 +60,27 @@ test('missing or extra elevations are refused', () => {
 
 const lisbon = M.parsePowerClimatology(require('./fixtures/nasa-power-lisbon.json'));
 
+const SOUTH_WALL = new Array(48).fill(0).map((_, i) => (i * 7.5 > 90 && i * 7.5 < 270 ? 80 : 0));
+
 test('an open horizon changes nothing; a wall to the south removes the beam', () => {
-  const open = M.monthlyYield(lisbon, 38.72, 35, 180).annual;
-  close(M.monthlyYield(lisbon, 38.72, 35, 180, { horizon: new Array(48).fill(0) }).annual, open, 1e-9);
-  const wall = new Array(48).fill(0).map((_, i) => (i * 7.5 > 90 && i * 7.5 < 270 ? 80 : 0));
-  const shaded = M.monthlyYield(lisbon, 38.72, 35, 180, { horizon: wall });
-  const diffuseAndGround = M.monthlyYield({ ...lisbon, ghi: lisbon.diffuse }, 38.72, 35, 180).annual;
+  for (const skyModel of M.SKY_MODELS) {
+    const open = M.monthlyYield(lisbon, 38.72, 35, 180, { skyModel }).annual;
+    close(M.monthlyYield(lisbon, 38.72, 35, 180, { skyModel, horizon: new Array(48).fill(0) }).annual, open, 1e-9);
+  }
+  const iso = { skyModel: 'isotropic' };
+  const shaded = M.monthlyYield(lisbon, 38.72, 35, 180, { ...iso, horizon: SOUTH_WALL });
+  const diffuseAndGround = M.monthlyYield({ ...lisbon, ghi: lisbon.diffuse }, 38.72, 35, 180, iso).annual;
   // With the beam gone, what is left is the diffuse sky plus ground reflection of the full GHI.
+  const open = M.monthlyYield(lisbon, 38.72, 35, 180, iso).annual;
   assert.ok(shaded.annual < open * 0.6 && shaded.annual > diffuseAndGround * 0.9, `${shaded.annual}`);
+});
+
+test('Hay–Davies: the wall also hides the circumsolar light, and only that', () => {
+  const hd = M.monthlyYield(lisbon, 38.72, 35, 180, { skyModel: 'hay-davies', horizon: SOUTH_WALL }).annual;
+  const iso = M.monthlyYield(lisbon, 38.72, 35, 180, { skyModel: 'isotropic', horizon: SOUTH_WALL }).annual;
+  // Behind the wall Hay–Davies keeps only the isotropic share (1 − A) of the diffuse light.
+  assert.ok(hd < iso, `${hd} vs ${iso}`);
+  assert.ok(hd > iso * 0.5, `${hd} vs ${iso}`);
 });
 
 test('a skyline to the north does not shade a south-facing array in the north', () => {
@@ -85,18 +98,26 @@ test('horizonAt interpolates and wraps round at north', () => {
 
 // ─── Against PVGIS: the shading physics with PVGIS's own horizon as input ───
 
+// Measured when written: isotropic mean gap 1.63 points (largest 3.7, Zermatt);
+// Hay–Davies 1.96 (largest 4.6, Chamonix), because it also shades the circumsolar light,
+// which PVGIS appears not to. These limits guard against regressions; they were not tuned.
+const HORIZON_LIMITS = { isotropic: { site: 4, mean: 2 }, 'hay-davies': { site: 5, mean: 2.5 } };
+
 test('yield loss from a skyline matches PVGIS within ~2 points at five mountain sites', () => {
   const { sites } = require('./fixtures/horizon-physics-pvgis.json');
-  const gaps = sites.map(s => {
-    const clim = M.parsePowerClimatology(s.climatology);
-    const open = M.monthlyYield(clim, s.lat, 35, 180).annual;
-    const shaded = M.monthlyYield(clim, s.lat, 35, 180, { horizon: s.pvgisHorizon }).annual;
-    const ours = (shaded / open - 1) * 100, pvgis = (s.pvgisShaded / s.pvgisOpen - 1) * 100;
-    assert.ok(Math.abs(ours - pvgis) < 4, `${s.name}: ${ours.toFixed(1)}% vs PVGIS ${pvgis.toFixed(1)}%`);
-    return Math.abs(ours - pvgis);
-  });
-  const mean = gaps.reduce((a, b) => a + b) / gaps.length;
-  assert.ok(mean < 2, `mean gap ${mean.toFixed(2)} points`); // 1.7 when written
+  for (const skyModel of M.SKY_MODELS) {
+    const limit = HORIZON_LIMITS[skyModel];
+    const gaps = sites.map(s => {
+      const clim = M.parsePowerClimatology(s.climatology);
+      const open = M.monthlyYield(clim, s.lat, 35, 180, { skyModel }).annual;
+      const shaded = M.monthlyYield(clim, s.lat, 35, 180, { skyModel, horizon: s.pvgisHorizon }).annual;
+      const ours = (shaded / open - 1) * 100, pvgis = (s.pvgisShaded / s.pvgisOpen - 1) * 100;
+      assert.ok(Math.abs(ours - pvgis) < limit.site, `${skyModel} ${s.name}: ${ours.toFixed(1)}% vs PVGIS ${pvgis.toFixed(1)}%`);
+      return Math.abs(ours - pvgis);
+    });
+    const mean = gaps.reduce((a, b) => a + b) / gaps.length;
+    assert.ok(mean < limit.mean, `${skyModel} mean gap ${mean.toFixed(2)} points`);
+  }
 });
 
 test('skyline from recorded Copernicus DEM heights at Zermatt is within ~2° of PVGIS', () => {
