@@ -34,6 +34,13 @@ All notable changes to this project are documented here. The format follows
 - The AI backend authenticates to the Claude API with workload identity federation:
   the Cloud Run service account's Google ID token is exchanged for a 10-minute Anthropic
   token, so no API key is stored in Secret Manager or anywhere else (#25).
+- **Hay–Davies sky model by default** instead of the isotropic sky. Splitting the gap to
+  PVGIS showed that most of the low bias for equator-facing arrays came from the
+  transposition, not from NASA's data. Mean error of the 7 equator-facing cases −3.8% →
+  −0.2%, mean absolute error over 11 cases 3.6% → 2.8%, Warsaw's optimal tilt 36° → 39°
+  (PVGIS 39°). Yields rise by 2–7% for well-oriented arrays (Warsaw P50 990 → 1030
+  kWh/kWp). East/west arrays and the terrain-shading comparison get slightly worse. The
+  isotropic sky stays available as `skyModel: 'isotropic'` (#35).
 
 ## [1.0.0] - 2026-10-01
 

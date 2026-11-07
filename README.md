@@ -105,7 +105,7 @@ With your own key there is no server in between: the key is used only to call `a
 
 The browser fetches the site's monthly climatology from the [NASA POWER](https://power.larc.nasa.gov/) API (global and diffuse horizontal irradiance and air temperature, 2001–2020 means) and computes the yield in [`solar-model.js`](solar-model.js). The climatology is cached in the browser with its retrieval date, which the source badge shows; after 180 days it is fetched again (if that fails, the cached data stays in use):
 
-1. **Transposition to the panel plane**: isotropic-sky model (Liu & Jordan; Duffie & Beckman, *Solar Engineering of Thermal Processes*, §2.19). The beam factor R_b is integrated over the day of each month's representative date, so any tilt, azimuth and hemisphere use one formula.
+1. **Transposition to the panel plane**: Hay–Davies anisotropic sky (Hay & Davies 1980; Duffie & Beckman, *Solar Engineering of Thermal Processes*, §2.16): the circumsolar share of the diffuse light, beam / extraterrestrial irradiation each month, is treated like beam light and the rest as an isotropic sky (Liu & Jordan, §2.19). Why it replaced the isotropic sky is explained [below](#where-the-gap-to-pvgis-came-from-issue-35). The beam factor R_b is integrated over the day of each month's representative date, so any tilt, azimuth and hemisphere use one formula.
 2. **Reflection at the glass**: ASHRAE incidence-angle modifier (b₀ = 0.05) on the beam, integrated over the day, and on sky and ground radiation at their effective incidence angles (Duffie & Beckman eq. 5.4.1–2).
 3. **Losses**: system losses set in the Configuration panel (default 14%, PVGIS's default input; remembered in this browser), −0.4%/°C above 25 °C cell temperature, with cells assumed 20 °C above the monthly mean air temperature.
 
@@ -115,32 +115,61 @@ If NASA POWER can't be reached, the app falls back to the old latitude-based est
 
 [PVGIS 5.3](https://re.jrc.ec.europa.eu/pvg_tools/en/) (European Commission JRC) is the reference tool for PV yield in Europe and Africa. No parameter was fitted to it. The PVGIS API cannot be called from a browser (no CORS), which is why the app uses NASA POWER.
 
-| Site | Tilt / facing | PVGIS kWh/kWp | This model | Without reflection losses | Previous formula |
-|---|---|---:|---:|---:|---:|
-| Lisbon | 35° S | 1579 | 1528 (−3.2%) | 1580 (+0.1%) | 1589 (+0.7%) |
-| Madrid | 36° S | 1620 | 1532 (−5.4%) | 1583 (−2.2%) | 1564 (−3.4%) |
-| Warsaw | 47° S | 1045 | 974 (−6.8%) | 1008 (−3.6%) | 1387 (+32.7%) |
-| Oslo | 54° S | 948 | 943 (−0.5%) | 975 (+2.8%) | 1271 (+34.0%) |
-| Cairo | 27° S | 1819 | 1709 (−6.1%) | 1768 (−2.8%) | 1481 (−18.6%) |
-| Sydney | 30° N | 1557 | 1463 (−6.0%) | 1514 (−2.7%) | 1538 (−1.2%) |
-| Johannesburg | 24° N | 1728 | 1752 (+1.4%) | 1812 (+4.8%) | 1423 (−17.7%) |
-| Lisbon | 35° W | 1293 | 1317 (+1.9%) | 1365 (+5.6%) | — |
-| Lisbon | 35° E | 1252 | 1317 (+5.2%) | 1365 (+9.0%) | — |
-| Lisbon | 15° N | 1154 | 1184 (+2.6%) | 1256 (+8.9%) | — |
-| Lisbon | flat | 1372 | 1363 (−0.6%) | 1432 (+4.4%) | — |
-| **Mean absolute error** | | | **3.6%** | 4.3% | 15.5% (7 sites) |
+| Site | Tilt / facing | PVGIS kWh/kWp | This model (Hay–Davies sky) | Isotropic sky | Isotropic, no reflection losses | Previous formula |
+|---|---|---:|---:|---:|---:|---:|
+| Lisbon | 35° S | 1579 | 1586 (+0.4%) | 1528 (−3.2%) | 1580 (+0.1%) | 1589 (+0.7%) |
+| Madrid | 36° S | 1620 | 1592 (−1.7%) | 1532 (−5.4%) | 1583 (−2.2%) | 1564 (−3.4%) |
+| Warsaw | 47° S | 1045 | 1021 (−2.3%) | 974 (−6.8%) | 1008 (−3.6%) | 1387 (+32.7%) |
+| Oslo | 54° S | 948 | 1006 (+6.1%) | 943 (−0.5%) | 975 (+2.8%) | 1271 (+34.0%) |
+| Cairo | 27° S | 1819 | 1754 (−3.6%) | 1709 (−6.1%) | 1768 (−2.8%) | 1481 (−18.6%) |
+| Sydney | 30° N | 1557 | 1506 (−3.3%) | 1463 (−6.0%) | 1514 (−2.7%) | 1538 (−1.2%) |
+| Johannesburg | 24° N | 1728 | 1783 (+3.1%) | 1752 (+1.4%) | 1812 (+4.8%) | 1423 (−17.7%) |
+| Lisbon | 35° W | 1293 | 1327 (+2.6%) | 1317 (+1.9%) | 1365 (+5.6%) | — |
+| Lisbon | 35° E | 1252 | 1327 (+6.0%) | 1317 (+5.2%) | 1365 (+9.0%) | — |
+| Lisbon | 15° N | 1154 | 1147 (−0.6%) | 1184 (+2.6%) | 1256 (+8.9%) | — |
+| Lisbon | flat | 1372 | 1363 (−0.6%) | 1363 (−0.6%) | 1432 (+4.4%) | — |
+| **Mean absolute error** | | | **2.8%** | 3.6% | 4.3% | 15.5% (7 sites) |
+| **Mean error, the 7 equator-facing arrays** | | | **−0.2%** | −3.8% | | |
+
+<sub>PVGIS 5.3 PVcalc, 14% losses. Madrid's and Johannesburg's NASA climatology (test fixtures added in issue #35) is the 2001–2025 one the API now returns; the other sites' fixtures are 2001–2020.</sub>
 
 The previous formula only knew latitude and happened to be calibrated around Lisbon; it missed cloudy northern climates and sunny low latitudes by 18–34%.
 
-Adding glass reflection losses was a trade-off, kept because it is physically correct and PVGIS models it too: it cut the error for east, west, north-facing and flat arrays from 4.4–9.0% to 0.6–5.2%, but moved well-oriented arrays from a mixed ±3% to a consistently low −0.5…−6.8% (mean 4.2%). The remaining low bias for optimal orientations likely comes from differences between NASA POWER's and PVGIS's irradiance data; it was not tuned away.
+Adding glass reflection losses was a trade-off, kept because it is physically correct and PVGIS models it too. It cut the error for east, west, north-facing and flat arrays from 4.4–9.0% to 0.6–5.2%. With the isotropic sky it also moved well-oriented arrays from a mixed ±3% to a consistently low −0.5…−6.8%.
 
-**Known limits.** No near-object shading (buildings, trees); terrain shading is optional (below). The optimal tilt comes out 1–3° below PVGIS's (Warsaw 36° vs 39°), though yield is flat near the optimum. NASA POWER's resolution is ~0.5–1°, so coastal and mountain sites mix neighbouring climates.
+#### Where the gap to PVGIS came from (issue #35)
+
+The low bias used to be put down to NASA POWER's irradiance data. Splitting the gap in two showed that this was only part of it.
+
+**1. The data.** Horizontal irradiation (GHI), NASA POWER climatology against PVGIS 5.3 MRcalc (2005–2023):
+
+| Site | Isotropic yield vs PVGIS | GHI, NASA vs PVGIS | Left for the model |
+|---|---:|---:|---:|
+| Lisbon | −3.2% | −0.3% | −2.9 points |
+| Warsaw | −6.8% | −2.4% | −4.4 points |
+| Oslo | −0.5% | +2.5% | −3.0 points |
+| Cairo | −6.1% | −4.3% | −1.8 points |
+| Sydney | −6.0% | −1.0% | −5.0 points |
+
+**2. The step to the panel plane.** The ratio of plane-of-array to horizontal irradiation on the same plane (reflection off in the model) is 3.5–5.3% lower than PVGIS's at all five sites (Lisbon 1.101 vs 1.142, Warsaw 1.107 vs 1.169, Oslo 1.180 vs 1.241, Cairo 1.061 vs 1.101, Sydney 1.098 vs 1.149). That is the remainder.
+
+The isotropic sky spreads diffuse light evenly, but on clear days much of it comes from around the sun, which an equator-facing panel faces. **Hay–Davies** (Hay & Davies 1980; Duffie & Beckman §2.16) treats a share A of the diffuse light like beam light. A is the anisotropy index: beam irradiation divided by extraterrestrial irradiation, each month. The rest stays isotropic. It is now the default and removes the low bias: the mean error of the equator-facing arrays goes from −3.8% to −0.2%.
+
+What it does not fix:
+
+- **The data part stays.** With the transposition corrected, the error mostly follows the GHI difference. Oslo, where NASA has 2.5% more than PVGIS, overshoots by 6.1%, and Cairo, with 4.3% less, is 3.6% low. Sydney is the exception: 1.0% less GHI but 3.3% low.
+- **East and west get slightly worse**, from +1.9% and +5.2% to +2.6% and +6.0%.
+- **The terrain-shading comparison gets slightly worse** (below).
+
+The isotropic model stays available as `skyModel: 'isotropic'` in `solar-model.js`.
+
+**Known limits.** No near-object shading (buildings, trees); terrain shading is optional (below). The optimal tilt now matches PVGIS's at Warsaw (39°; the isotropic sky gave 36°). NASA POWER's resolution is ~0.5–1°, so coastal and mountain sites mix neighbouring climates.
 
 ### Horizon shading from terrain
 
 Mountains and hills block the low sun. **Compute horizon from terrain** samples the ground around the site centre in 48 directions (every 7.5°, PVGIS's step) at 12 distances from 100 m to 25 km, spaced geometrically, and takes the steepest elevation angle in each direction after Earth curvature and refraction (*d*²(1 − 0.13) / 2*R*: a peak 25 km away sits ~43 m lower than on a flat Earth). Heights come from the **Open-Meteo elevation API** (Copernicus DEM GLO-90, global, callable from the browser) ([`horizon.js`](horizon.js)). The free service allows about 600 heights a minute and a few thousand an hour per visitor, so the 577 heights for one site are fetched only on request and kept in this browser.
 
-In the yield model, hours when the sun is below the skyline add no beam irradiance to the plane. Every yield in the app then includes the horizon: the measured orientation, the optimal tilt, P50/P90 and the economics. The chart shows the skyline with the sun's path on 21 June and 21 December.
+In the yield model, hours when the sun is below the skyline add no beam irradiance to the plane, and with the Hay–Davies sky no circumsolar light either. Every yield in the app then includes the horizon: the measured orientation, the optimal tilt, P50/P90 and the economics. The chart shows the skyline with the sun's path on 21 June and 21 December.
 
 **Validation against PVGIS**, in two separate parts so the terrain data and the physics can each be judged:
 
@@ -157,16 +186,18 @@ The fixtures behind the tests are recorded with `node tools/make-horizon-fixture
 
 Yield loss with **PVGIS's own horizon** as input (35° south, 14% losses), compared with PVGIS run with and without its horizon:
 
-| Site | Mean skyline | PVGIS | This model, beam shaded | Beam and sky diffuse shaded |
-|------|------|------|------|------|
-| Zermatt | 20.2° | −14.0% | −10.3% | −15.1% |
-| Innsbruck | 9.5° | −1.5% | −2.2% | −3.5% |
-| Chamonix | 18.9° | −8.9% | −11.6% | −15.7% |
-| Hallstatt | 22.5° | −15.8% | −14.6% | −21.4% |
-| Bergen | 7.7° | −4.3% | −4.5% | −5.5% |
-| Lisbon, Warsaw | 2.2°, 1.1° | 0.0%, 0.0% | −0.4%, −0.2% | −0.4%, −0.3% |
+| Site | Mean skyline | PVGIS | Hay–Davies: beam and circumsolar shaded | Isotropic: beam shaded | Isotropic: beam and sky diffuse shaded |
+|------|------|------|------|------|------|
+| Zermatt | 20.2° | −14.0% | −12.1% | −10.3% | −15.1% |
+| Innsbruck | 9.5° | −1.5% | −2.5% | −2.2% | −3.5% |
+| Chamonix | 18.9° | −8.9% | −13.5% | −11.6% | −15.7% |
+| Hallstatt | 22.5° | −15.8% | −17.2% | −14.6% | −21.4% |
+| Bergen | 7.7° | −4.3% | −5.2% | −4.5% | −5.5% |
+| Lisbon, Warsaw | 2.2°, 1.1° | 0.0%, 0.0% | — | −0.4%, −0.2% | −0.4%, −0.3% |
 
-Shading only the beam is within 1.7 percentage points of PVGIS on average at the five mountain sites; also removing the isotropic diffuse sky behind the skyline doubled the gap (3.3 points), so only the beam is shaded. That choice was made on this comparison, so these five sites are not an independent test of it. The diffuse light from the hidden sky is still counted, which is physically optimistic in deep valleys.
+With the isotropic sky, shading only the beam was within 1.6 percentage points of PVGIS on average at the five mountain sites. Also removing the isotropic diffuse sky behind the skyline doubled the gap (3.3 points), so only the beam was shaded. That choice was made on this comparison, so these five sites are not an independent test of it.
+
+Hay–Davies also hides the circumsolar light whenever the sun is behind the skyline, because that light comes from the sun's direction. That is physically right, but it moves the losses away from PVGIS's: the mean gap is 2.0 points, against 1.6 for the isotropic beam-only case. It is closer at Zermatt and further at the other four, and furthest at Chamonix (4.6 points). PVGIS appears to shade the beam only. The isotropic share of the diffuse light from the hidden sky is still counted, which is physically optimistic in deep valleys.
 
 ### Year-to-year variability (P50 / P90)
 
@@ -177,10 +208,12 @@ The average year is not the whole story: lenders size a solar farm's debt on **P
 
 | Site | Years | P50 | P90 | Year-to-year σ | Empirical 10th pct. |
 |------|-------|-----|-----|----------------|---------------------|
-| Warsaw, 35° S | 2001–2025 | 990 | 936 (−5.4%) | 4.2% | 932 |
-| Lisbon demo, surveyed 11.9° / 175° | 2001–2025 | 1464 | 1417 (−3.2%) | 2.5% | — |
+| Warsaw, 35° S | 2001–2025 | 1030 | 972 (−5.6%) | 4.4% | 966 |
+| Lisbon demo, surveyed 11.9° / 175° | 2001–2025 | 1489 | 1440 (−3.3%) | 2.6% | — |
 
-As a consistency check, the mean of the yearly runs over 2001–2020 (Warsaw: 986.0 kWh/kWp) matches the yield from the 2001–2020 climatology (986.3) to 0.03%: the two requests describe the same data.
+<sub>With the isotropic sky used before issue #35: Warsaw 990 / 936, Lisbon demo 1464 / 1417.</sub>
+
+As a consistency check, the mean of the yearly runs over 2001–2020 (Warsaw: 1025.8 kWh/kWp) matches the yield from the 2001–2020 climatology (1026.2) to 0.04%: the two requests describe the same data.
 
 **What this P90 is not.** It is weather variability only. A bankable P90 also folds in the uncertainty of the yield model (see the PVGIS comparison above) and of the satellite irradiance, typically a few percent each, which would push it lower. Years NASA has not completed yet are left out.
 

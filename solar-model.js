@@ -2,8 +2,8 @@
 // Monthly energy yield of a fixed PV array from NASA POWER climatology
 // (20-year monthly means of global and diffuse horizontal irradiance and
 // air temperature). Irradiance is transposed to the tilted plane with the
-// isotropic-sky model (Liu & Jordan; Duffie & Beckman, "Solar Engineering of
-// Thermal Processes", §2.19). The beam tilt factor R_b is integrated over the
+// Hay–Davies anisotropic sky by default, or the isotropic sky (Liu & Jordan;
+// Duffie & Beckman, "Solar Engineering of Thermal Processes", §2.16, §2.19). The beam tilt factor R_b is integrated over the
 // day of each month's recommended average date, which handles any tilt,
 // azimuth and hemisphere with one formula. Reflection losses at the module
 // glass use the ASHRAE incidence-angle modifier. Validated against PVGIS in
@@ -24,10 +24,24 @@
     groundAlbedo: 0.2,       // standard ground reflectance; NASA's 1° cell albedo is skewed by nearby sea
     iamB0: 0.05,             // ASHRAE incidence-angle modifier for glass-covered modules; 0 disables it
     horizon: null,           // skyline profile (see horizonAt); null = open horizon
+    skyModel: 'hay-davies',  // diffuse light: 'isotropic' or 'hay-davies' (see monthlyYield)
   };
+  const SKY_MODELS = ['isotropic', 'hay-davies'];
+  const SOLAR_CONSTANT = 1.367; // kW/m² (Duffie & Beckman §1.2)
 
   function declination(n) {
     return 23.45 * Math.sin(2 * Math.PI * (284 + n) / 365);
+  }
+
+  // Daily extraterrestrial irradiation on a horizontal surface, kWh/m²/day
+  // (Duffie & Beckman eq. 1.10.3). 0 during polar night.
+  function extraterrestrialDaily(lat, n) {
+    const phi = lat * DEG, d = declination(n) * DEG;
+    const cosWs = Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(d)));
+    const ws = Math.acos(cosWs);
+    const h0 = (24 / Math.PI) * SOLAR_CONSTANT * (1 + 0.033 * Math.cos(2 * Math.PI * n / 365)) *
+      (Math.cos(phi) * Math.cos(d) * Math.sin(ws) + ws * Math.sin(phi) * Math.sin(d));
+    return Math.max(0, h0);
   }
 
   // Share of light that passes the module glass at incidence angle θ (ASHRAE model):
@@ -103,8 +117,16 @@
 
   // climatology: { ghi[12], diffuse[12] } in kWh/m²/day and { temp[12] } in °C.
   // Returns monthly and annual yield in kWh per kWp, plus plane-of-array irradiation.
+  //
+  // Sky models for diffuse light:
+  //  - 'isotropic' (Liu & Jordan): spread evenly over the sky dome.
+  //  - 'hay-davies' (Hay & Davies 1980; Duffie & Beckman §2.16): a share A of it, the
+  //    anisotropy index A = beam / extraterrestrial, comes from around the sun and is
+  //    treated like beam (same beam factor, so also glass reflection and horizon);
+  //    the rest is isotropic. Clear skies give a large A, overcast skies A ≈ 0.
   function monthlyYield(climatology, lat, tilt, compassAz, options = {}) {
     const o = { ...DEFAULTS, ...options };
+    if (!SKY_MODELS.includes(o.skyModel)) throw new Error(`unknown sky model: ${o.skyModel}`);
     const cosB = Math.cos(tilt * DEG);
     const kSky = (o.iamB0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), o.iamB0) : 1);
     const kGround = o.iamB0 > 0 ? incidenceModifier(Math.cos(groundIncidenceDeg(tilt) * DEG), o.iamB0) : 1;
@@ -112,7 +134,11 @@
       const H = climatology.ghi[m];
       const Hd = Math.min(climatology.diffuse[m], H);
       const Rb = beamTiltFactor(lat, tilt, compassAz, n, o.iamB0, o.horizon);
-      const poaDaily = (H - Hd) * Rb + Hd * (1 + cosB) / 2 * kSky + H * o.groundAlbedo * (1 - cosB) / 2 * kGround;
+      const H0 = extraterrestrialDaily(lat, n);
+      const A = o.skyModel === 'hay-davies' && H0 > 0 ? Math.min(1, (H - Hd) / H0) : 0;
+      const poaDaily = (H - Hd) * Rb +
+        Hd * (A * Rb + (1 - A) * (1 + cosB) / 2 * kSky) +
+        H * o.groundAlbedo * (1 - cosB) / 2 * kGround;
       const cellTemp = climatology.temp[m] + o.cellTempRise;
       const tempFactor = 1 + o.tempCoeff * (cellTemp - 25);
       const poa = poaDaily * DAYS_IN_MONTH[m];
@@ -233,6 +259,7 @@
     beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
     powerMonthlyUrl, parsePowerMonthly, yearlyYields, exceedance, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
+    extraterrestrialDaily, SKY_MODELS,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;

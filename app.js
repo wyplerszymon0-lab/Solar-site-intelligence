@@ -1418,7 +1418,7 @@ function buildInitialPrompt(stats) {
     `ESTIMATED ANNUAL YIELD AT MEASURED ORIENTATION: ${stats.yieldEst} kWh/kWp/yr\n` +
     `ESTIMATED ANNUAL YIELD AT OPTIMAL ORIENTATION (${stats.optTilt.toFixed(0)}° tilt): ${stats.optimalYield} kWh/kWp/yr\n` +
     (stats.ghiAnnual != null
-      ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (NASA POWER 2001–2020 climatology; yield via isotropic-sky transposition, ${stats.systemLossPct}% system losses, temperature derating)\n`
+      ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (NASA POWER 2001–2020 climatology; yield via Hay–Davies anisotropic-sky transposition, ${stats.systemLossPct}% system losses, temperature derating)\n`
       : `YIELD SOURCE: rough latitude-based estimate (satellite data unavailable)\n`) +
     `SYSTEM LOSSES (user setting: wiring, inverter, soiling, mismatch): ${stats.systemLossPct}%\n` +
     (stats.variability
