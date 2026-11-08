@@ -250,6 +250,29 @@ test('the yearly runs average to the climatology over the same years', () => {
   assert.ok(Math.abs(mean / fromClimatology - 1) < 0.001, `${mean} vs ${fromClimatology}`);
 });
 
+// Issue #37. Since late 2026 the climatology API's header says "25-year … (January 2001 -
+// December 2025)", but the numbers are unchanged: they are the 2001–2020 means. Shown
+// with the API's own month-by-month data at two sites. test/fixtures/check-power-period.js
+// repeats the comparison against the live API.
+test('the climatology labelled 2001–2025 is still the 2001–2020 mean', () => {
+  for (const site of ['warsaw', 'lisbon']) {
+    const response = require(`./fixtures/nasa-power-${site}-v2.10.1.json`);
+    assert.match(response.header.range, /January 2001 - December 2025/);
+    const labelled = M.parsePowerClimatology(response);
+    assert.deepEqual(labelled, clim(site), `${site}: the same values as the 2001–2020 climatology`);
+
+    const years = M.parsePowerMonthly(require(`./fixtures/nasa-power-monthly-${site}.json`));
+    const gap = (last, key) => Math.max(...labelled[key].map((v, m) => {
+      const kept = years.filter(y => y.year <= last);
+      return Math.abs(kept.reduce((s, y) => s + y[key][m], 0) / kept.length - v);
+    }));
+    // Means of 2001–2020 match to the rounding of the published values;
+    // 2001–2025 would differ by several hundredths, and by tenths of a degree.
+    assert.ok(gap(2020, 'ghi') < 0.001 && gap(2020, 'diffuse') < 0.001 && gap(2020, 'temp') < 0.01, site);
+    assert.ok(gap(2025, 'ghi') > 0.04 && gap(2025, 'temp') > 0.2, site);
+  }
+});
+
 test('exceedance: P50 is the mean, P90 is 1.2816 sample sigma below it', () => {
   const e = M.exceedance([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   assert.equal(e.p50, 5.5);

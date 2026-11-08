@@ -42,6 +42,13 @@ All notable changes to this project are documented here. The format follows
   kWh/kWp). East/west arrays and the terrain-shading comparison get slightly worse. The
   isotropic sky stays available as `skyModel: 'isotropic'` (#35).
 
+### Fixed
+- **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said
+  "January 2001 - December 2025" since late 2026, but the values are still the 2001–2020
+  means: they equal NASA's own monthly data averaged over 2001–2020 to 0.0002 kWh/m²/day
+  at four sites, while 2001–2025 would differ by up to 0.11. The app's "2001–2020" label
+  was right and stays; a test and `tools/check-power-period.mjs` check it (#37).
+
 ## [1.0.0] - 2026-10-01
 
 First tagged release.

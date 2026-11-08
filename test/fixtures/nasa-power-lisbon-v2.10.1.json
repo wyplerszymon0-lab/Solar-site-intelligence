@@ -1,0 +1,96 @@
+{
+ "source": "NASA POWER climatology API v2.10.1, full response for Lisbon (38.72, -9.14), retrieved 2026-11-08",
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   -9.14,
+   38.72,
+   23.88
+  ]
+ },
+ "properties": {
+  "parameter": {
+   "ALLSKY_SFC_SW_DIFF": {
+    "JAN": 1.0015,
+    "FEB": 1.3606,
+    "MAR": 1.8398,
+    "APR": 2.2411,
+    "MAY": 2.4055,
+    "JUN": 2.443,
+    "JUL": 2.1559,
+    "AUG": 1.9183,
+    "SEP": 1.7887,
+    "OCT": 1.4575,
+    "NOV": 1.074,
+    "DEC": 0.9017,
+    "ANN": 1.7165
+   },
+   "ALLSKY_SFC_SW_DWN": {
+    "JAN": 2.2678,
+    "FEB": 3.2707,
+    "MAR": 4.4652,
+    "APR": 5.8181,
+    "MAY": 6.9199,
+    "JUN": 7.2638,
+    "JUL": 7.2943,
+    "AUG": 6.6588,
+    "SEP": 5.2738,
+    "OCT": 3.666,
+    "NOV": 2.5265,
+    "DEC": 2.0626,
+    "ANN": 4.7974
+   },
+   "T2M": {
+    "JAN": 12.91,
+    "FEB": 12.77,
+    "MAR": 13.8,
+    "APR": 15.04,
+    "MAY": 16.86,
+    "JUN": 18.85,
+    "JUL": 19.9,
+    "AUG": 20.47,
+    "SEP": 19.98,
+    "OCT": 18.58,
+    "NOV": 15.52,
+    "DEC": 13.54,
+    "ANN": 16.54
+   }
+  }
+ },
+ "header": {
+  "title": "NASA/POWER Source Native Resolution Climatology Climatologies",
+  "api": {
+   "version": "v2.10.1",
+   "name": "POWER Climatology API"
+  },
+  "sources": [
+   "MERRA2",
+   "SYN1DEG"
+  ],
+  "fill_value": -999.0,
+  "time_standard": "LST",
+  "range": "25-year Meteorological and Solar Monthly & Annual Climatologies (January 2001 - December 2025)"
+ },
+ "messages": [
+  "The requested parameters are retrieved from a pre-computed climatological period (January 2001 - December 2025)"
+ ],
+ "parameters": {
+  "ALLSKY_SFC_SW_DIFF": {
+   "units": "kW-hr/m^2/day",
+   "longname": "All Sky Surface Shortwave Diffuse Irradiance"
+  },
+  "ALLSKY_SFC_SW_DWN": {
+   "units": "kW-hr/m^2/day",
+   "longname": "All Sky Surface Shortwave Downward Irradiance"
+  },
+  "T2M": {
+   "units": "C",
+   "longname": "Temperature at 2 Meters"
+  }
+ },
+ "times": {
+  "data": 0.192,
+  "process": 0.03
+ }
+}
