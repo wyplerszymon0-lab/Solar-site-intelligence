@@ -193,7 +193,7 @@ const I18N = {
     'toast.shareLoaded': 'Loaded data from share link',
     'toast.shareLong': 'Share link is long — for big datasets, Saved Analyses works better',
     'toast.lastSessionRestored': 'Restored your last session',
-    'source.satellite': 'NASA POWER satellite climatology 2001–2020',
+    'source.satellite': 'NASA POWER satellite data {period}',
     'source.retrieved': 'retrieved {date}',
     'upload.aria': 'Upload CSV file with survey points',
     'aria.language': 'Language',
@@ -370,7 +370,7 @@ const I18N = {
     'toast.shareLoaded': 'Wczytano dane z linku',
     'toast.shareLong': 'Link jest długi — dla dużych zbiorów lepiej sprawdzi się zapis w Zapisanych analizach',
     'toast.lastSessionRestored': 'Przywrócono ostatnią sesję',
-    'source.satellite': 'Dane satelitarne NASA POWER 2001–2020',
+    'source.satellite': 'Dane satelitarne NASA POWER {period}',
     'source.retrieved': 'pobrano {date}',
     'upload.aria': 'Wczytaj plik CSV z punktami pomiarowymi',
     'aria.language': 'Język',
@@ -758,6 +758,27 @@ function optimalTiltFor(clim, lat, options) {
   return { tilt, yield: curve[tilt], curve };
 }
 
+// The monthly climatology behind every satellite yield (issue #39): the mean of the
+// month-by-month series when it is in, so the yield and P50/P90 cover the same years;
+// NASA's precomputed climatology while the series loads or when it fails. NASA labels
+// that one 2001–2025, but its values are the 2001–2020 means (issue #37).
+const NASA_CLIMATOLOGY_PERIOD = { first: 2001, last: 2020 };
+const seriesClimatologies = new WeakMap(); // series entry → its climatology, built once
+function siteClimatology(lat, lon) {
+  const series = yearlySeries.get(lat, lon);
+  if (series && typeof series === 'object') {
+    if (!seriesClimatologies.has(series)) {
+      seriesClimatologies.set(series, { ...SolarModel.climatologyFromSeries(series.years), fetchedAt: series.fetchedAt });
+    }
+    return { clim: seriesClimatologies.get(series), fromSeries: true };
+  }
+  const clim = climatology.get(lat, lon);
+  if (clim && typeof clim === 'object') return { clim: { ...clim, period: NASA_CLIMATOLOGY_PERIOD }, fromSeries: false };
+  return { clim, fromSeries: false }; // 'loading' | 'error' | undefined
+}
+
+const periodLabel = (period) => `${period.first}–${period.last}`;
+
 // Single source of truth for every derived number shown in the UI, and
 // reused by the exports, the AI prompt, and the chart renderers.
 function computeSiteStats(data) {
@@ -784,8 +805,9 @@ function computeSiteStats(data) {
   const systemLoss = currentSystemLoss();
   const horizon = siteHorizon(centerLat, centerLon);
   const modelOptions = { systemLoss, horizon }; // every yield below sees the skyline, once computed
-  const clim = climatology.get(centerLat, centerLon);
+  const { clim, fromSeries } = siteClimatology(centerLat, centerLon);
   let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null, climFetchedAt = null;
+  let climPeriod = null;
   let horizonLossPct = null;
   if (clim && typeof clim === 'object') {
     const opt = optimalTiltFor(clim, centerLat, modelOptions);
@@ -802,6 +824,7 @@ function computeSiteStats(data) {
     ghiAnnual = Math.round(clim.ghi.reduce((s, v, m) => s + v * [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m], 0));
     yieldSource = 'satellite';
     climFetchedAt = clim.fetchedAt ?? null; // null for entries cached before timestamps existed
+    climPeriod = { ...clim.period, fromSeries };
   } else {
     optTilt = Math.abs(centerLat) * 0.9;
     // The rough formula was calibrated at the default losses; scale it to the user's setting.
@@ -852,7 +875,7 @@ function computeSiteStats(data) {
   const stats = {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
-    systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, variability, horizon, horizonLossPct,
+    systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, climPeriod, variability, horizon, horizonLossPct,
     facing, facingAz, hull, area,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
@@ -1309,7 +1332,7 @@ function renderStats(data, stats) {
   document.getElementById('badge-facing').textContent = stats.facing === 'S' ? t('facing.south') : t('facing.north');
   document.getElementById('badge-yield').textContent  = stats.yieldEst.toLocaleString() + ' kWh/kWp/yr';
   const retrieved = stats.climFetchedAt && formatRetrievedDate(stats.climFetchedAt);
-  document.getElementById('badge-source').textContent = t('source.' + stats.yieldSource) +
+  document.getElementById('badge-source').textContent = yieldSourceLabel(stats) +
     (retrieved ? ' · ' + t('source.retrieved', { date: retrieved }) : '');
   document.getElementById('point-count').textContent  = t('header.pointsLoaded', { n: data.length });
 
@@ -1400,6 +1423,11 @@ function systemPrompt() {
   return currentLang === 'pl' ? base + ' Respond in Polish.' : base;
 }
 
+// Where the yield came from, with the years of satellite data behind it.
+function yieldSourceLabel(stats) {
+  return t('source.' + stats.yieldSource, { period: stats.climPeriod ? periodLabel(stats.climPeriod) : '' }).trim();
+}
+
 function buildInitialPrompt(stats) {
   const slopes     = currentData.filter(p => p.slope     != null).map(p => p.slope);
   const elevations = currentData.filter(p => p.elevation != null).map(p => p.elevation);
@@ -1418,7 +1446,9 @@ function buildInitialPrompt(stats) {
     `ESTIMATED ANNUAL YIELD AT MEASURED ORIENTATION: ${stats.yieldEst} kWh/kWp/yr\n` +
     `ESTIMATED ANNUAL YIELD AT OPTIMAL ORIENTATION (${stats.optTilt.toFixed(0)}° tilt): ${stats.optimalYield} kWh/kWp/yr\n` +
     (stats.ghiAnnual != null
-      ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (NASA POWER 2001–2020 climatology; yield via Hay–Davies anisotropic-sky transposition, ${stats.systemLossPct}% system losses, temperature derating)\n`
+      ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (${stats.climPeriod?.fromSeries
+        ? `mean of NASA POWER monthly data ${periodLabel(stats.climPeriod)}, the same years as the P50/P90`
+        : `NASA POWER climatology, ${periodLabel(stats.climPeriod ?? NASA_CLIMATOLOGY_PERIOD)} means`}; yield via Hay–Davies anisotropic-sky transposition, ${stats.systemLossPct}% system losses, temperature derating)\n`
       : `YIELD SOURCE: rough latitude-based estimate (satellite data unavailable)\n`) +
     `SYSTEM LOSSES (user setting: wiring, inverter, soiling, mismatch): ${stats.systemLossPct}%\n` +
     (stats.variability
@@ -1726,7 +1756,7 @@ document.getElementById('export-pdf-btn').addEventListener('click', () => {
   document.getElementById('print-monthly').innerHTML = SiteExport.monthlyYieldTableHTML(
     stats.seasonal,
     t('print.months').split(','),
-    t('print.monthly', { annual: stats.yieldEst.toLocaleString(), source: t(`source.${stats.yieldSource}`) }),
+    t('print.monthly', { annual: stats.yieldEst.toLocaleString(), source: yieldSourceLabel(stats) }),
   );
   window.print();
 });

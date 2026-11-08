@@ -40,6 +40,9 @@
           // Date the satellite data was fetched (YYYY-MM-DD), null for the heuristic.
           yield_data_retrieved: stats.yieldSource === 'satellite' && stats.climFetchedAt
             ? stats.climFetchedAt.slice(0, 10) : null,
+          // Years the satellite data averages, e.g. "2001-2025"; null for the heuristic.
+          yield_data_years: stats.yieldSource === 'satellite' && stats.climPeriod
+            ? `${stats.climPeriod.first}-${stats.climPeriod.last}` : null,
           system_loss_pct: stats.systemLossPct,
         },
       });

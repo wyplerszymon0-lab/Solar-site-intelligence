@@ -22,6 +22,7 @@ const stats = (overrides = {}) => ({
   yieldSource: 'satellite',
   systemLossPct: 14,
   climFetchedAt: '2026-10-03T08:15:00.000Z',
+  climPeriod: { first: 2001, last: 2025, years: 25, fromSeries: true },
   ...overrides,
 });
 
@@ -35,6 +36,7 @@ test('site boundary carries annual and monthly yield with its source', () => {
     yield_monthly_kwh_per_kwp: MONTHLY,
     yield_source: 'nasa_power',
     yield_data_retrieved: '2026-10-03',
+    yield_data_years: '2001-2025',
     system_loss_pct: 14,
   });
   assert.equal(boundary.properties.yield_monthly_kwh_per_kwp.length, 12);
@@ -100,4 +102,11 @@ test('retrieval date is exported only for satellite data', () => {
   assert.equal(heuristic.features.at(-1).properties.yield_data_retrieved, null);
   const legacy = buildGeoJSON(data, stats({ climFetchedAt: null })); // cached before timestamps
   assert.equal(legacy.features.at(-1).properties.yield_data_retrieved, null);
+});
+
+test('the years behind the yield are exported only for satellite data', () => {
+  const props = (o) => buildGeoJSON(data, stats(o)).features.at(-1).properties.yield_data_years;
+  assert.equal(props({ climPeriod: { first: 2001, last: 2020, fromSeries: false } }), '2001-2020'); // NASA's climatology
+  assert.equal(props({ yieldSource: 'heuristic' }), null);
+  assert.equal(props({ climPeriod: null }), null);
 });

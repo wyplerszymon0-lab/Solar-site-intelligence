@@ -211,6 +211,23 @@
     return series;
   }
 
+  // The monthly climatology of a series: the mean of each month over its complete years,
+  // in the shape monthlyYield takes, with the years it covers. NASA's own climatology
+  // carries a period label that need not match its values (issue #37); this one covers
+  // exactly the years given, the same ones P50/P90 use. `years` can be below
+  // last − first + 1 when a year in between was incomplete and left out.
+  function climatologyFromSeries(series) {
+    if (!Array.isArray(series) || series.length < MIN_SERIES_YEARS) {
+      throw new Error(`need at least ${MIN_SERIES_YEARS} complete years`);
+    }
+    const monthMean = (field) => MONTH_KEYS.map((_, m) => series.reduce((s, y) => s + y[field][m], 0) / series.length);
+    const years = series.map(y => y.year);
+    return {
+      ghi: monthMean('ghi'), diffuse: monthMean('diffuse'), temp: monthMean('temp'),
+      period: { first: Math.min(...years), last: Math.max(...years), years: series.length },
+    };
+  }
+
   // Annual yield of every year in the series, at one tilt and azimuth.
   function yearlyYields(series, lat, tilt, compassAz, options = {}) {
     return series.map(y => ({ year: y.year, annual: monthlyYield(y, lat, tilt, compassAz, options).annual }));
@@ -257,7 +274,7 @@
 
   const api = {
     beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
-    powerMonthlyUrl, parsePowerMonthly, yearlyYields, exceedance, FIRST_SERIES_YEAR, horizonAt, sunPath,
+    powerMonthlyUrl, parsePowerMonthly, climatologyFromSeries, yearlyYields, exceedance, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
     extraterrestrialDaily, SKY_MODELS,
   };
