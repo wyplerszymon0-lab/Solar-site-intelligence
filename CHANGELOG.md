@@ -41,6 +41,14 @@ All notable changes to this project are documented here. The format follows
   (PVGIS 39°). Yields rise by 2–7% for well-oriented arrays (Warsaw P50 990 → 1030
   kWh/kWp). East/west arrays and the terrain-shading comparison get slightly worse. The
   isotropic sky stays available as `skyModel: 'isotropic'` (#35).
+- **The yield and P50/P90 now cover the same years.** The climatology behind every
+  yield is the month-by-month mean of NASA POWER's monthly data for each complete year
+  since 2001 (now 2001–2025), the series the P50/P90 already used, so its period is exact
+  and the badge, PDF, GeoJSON (`yield_data_years`) and AI prompt name it. Before, the
+  yield came from NASA's 2001–2020 climatology and sat 0.35% below the P50 at Warsaw;
+  now 0.04%. Yields move by −0.6 … +0.6% at the validation sites; the mean absolute
+  error against PVGIS stays 2.75%. NASA's climatology remains the fallback while the
+  series loads or if it fails (#39).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said

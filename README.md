@@ -21,7 +21,7 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 
 **Site statistics & analysis**
 - **Hemisphere-aware facing** — south- or north-facing recommendation, correct on both sides of the equator (azimuths are averaged as angles, so 350° and 10° average to 0°, not 180°)
-- **Energy yield from satellite irradiance** — annual and monthly kWh/kWp computed from 20 years of NASA POWER satellite data for the exact site, at the surveyed tilt and azimuth (see [Yield model](#yield-model))
+- **Energy yield from satellite irradiance** — annual and monthly kWh/kWp computed from NASA POWER satellite data for every complete year since 2001 (now 2001–2025) at the exact site, at the surveyed tilt and azimuth (see [Yield model](#yield-model))
 - **Climate-specific optimal tilt** — the equator-facing tilt that maximises annual yield for this site's climate, found numerically instead of a latitude rule of thumb
 - **Orientation check** — how much yield the surveyed orientation loses versus the optimum at the same site
 - **Row-spacing / panel-count estimate** — suggested row spacing and how many rows fit the site, sized to avoid self-shading near the winter solstice
@@ -103,7 +103,7 @@ With your own key there is no server in between: the key is used only to call `a
 
 ## Yield model
 
-The browser fetches the site's monthly climatology from the [NASA POWER](https://power.larc.nasa.gov/) API (global and diffuse horizontal irradiance and air temperature, 2001–2020 means) and computes the yield in [`solar-model.js`](solar-model.js). The climatology is cached in the browser with its retrieval date, which the source badge shows; after 180 days it is fetched again (if that fails, the cached data stays in use):
+The browser fetches the site's global and diffuse horizontal irradiance and air temperature from the [NASA POWER](https://power.larc.nasa.gov/) API, month by month for every complete year since 2001. It averages each month over those years (`climatologyFromSeries` in [`solar-model.js`](solar-model.js)) and computes the yield from that mean year. The P50/P90 below run the same model on each year, so the yield and the P50 cover the same years, and the source badge names them: "NASA POWER satellite data 2001–2025". While the series is loading, or if it fails, the app uses NASA's precomputed climatology instead, labelled 2001–2020 (see below why). Both are cached in the browser with their retrieval date, which the badge shows; after 180 days they are fetched again (if that fails, the cached data stays in use):
 
 1. **Transposition to the panel plane**: Hay–Davies anisotropic sky (Hay & Davies 1980; Duffie & Beckman, *Solar Engineering of Thermal Processes*, §2.16): the circumsolar share of the diffuse light, beam / extraterrestrial irradiation each month, is treated like beam light and the rest as an isotropic sky (Liu & Jordan, §2.19). Why it replaced the isotropic sky is explained [below](#where-the-gap-to-pvgis-came-from-issue-35). The beam factor R_b is integrated over the day of each month's representative date, so any tilt, azimuth and hemisphere use one formula.
 2. **Reflection at the glass**: ASHRAE incidence-angle modifier (b₀ = 0.05) on the beam, integrated over the day, and on sky and ground radiation at their effective incidence angles (Duffie & Beckman eq. 5.4.1–2).
@@ -111,29 +111,29 @@ The browser fetches the site's monthly climatology from the [NASA POWER](https:/
 
 If NASA POWER can't be reached, the app falls back to the old latitude-based estimate and labels it as such.
 
-**Which years the climatology covers (issue #37).** Since late 2026 the API's header says the climatology covers January 2001 – December 2025. The numbers did not change, though: at Warsaw, Lisbon, Madrid and Johannesburg they equal the mean of NASA's own month-by-month data for **2001–2020**, to within 0.0002 kWh/m²/day. The 2001–2025 mean would differ by 0.04–0.11 kWh/m²/day in some months, and its temperatures by up to 0.6 °C. So the app keeps saying 2001–2020. `node tools/check-power-period.mjs [lat lon …]` repeats the comparison against the live API, and a test does the same on recorded responses.
+**Which years the climatology covers (issue #37).** Since late 2026 the API's header says the climatology covers January 2001 – December 2025. The numbers did not change, though: at Warsaw, Lisbon, Madrid and Johannesburg they equal the mean of NASA's own month-by-month data for **2001–2020**, to within 0.0002 kWh/m²/day. The 2001–2025 mean would differ by 0.04–0.11 kWh/m²/day in some months, and its temperatures by up to 0.6 °C. So the app labels that climatology 2001–2020. `node tools/check-power-period.mjs [lat lon …]` repeats the comparison against the live API, and a test does the same on recorded responses. Since issue #39 the app no longer depends on that label: the climatology it uses is computed from the yearly data, so its period is known exactly. Averaged over 2001–2020, that series reproduces NASA's climatology at all seven validation sites, to within 0.02 kWh/kWp of yield.
 
 ### Validation against PVGIS
 
 [PVGIS 5.3](https://re.jrc.ec.europa.eu/pvg_tools/en/) (European Commission JRC) is the reference tool for PV yield in Europe and Africa. No parameter was fitted to it. The PVGIS API cannot be called from a browser (no CORS), which is why the app uses NASA POWER.
 
-| Site | Tilt / facing | PVGIS kWh/kWp | This model (Hay–Davies sky) | Isotropic sky | Isotropic, no reflection losses | Previous formula |
-|---|---|---:|---:|---:|---:|---:|
-| Lisbon | 35° S | 1579 | 1586 (+0.4%) | 1528 (−3.2%) | 1580 (+0.1%) | 1589 (+0.7%) |
-| Madrid | 36° S | 1620 | 1592 (−1.7%) | 1532 (−5.4%) | 1583 (−2.2%) | 1564 (−3.4%) |
-| Warsaw | 47° S | 1045 | 1021 (−2.3%) | 974 (−6.8%) | 1008 (−3.6%) | 1387 (+32.7%) |
-| Oslo | 54° S | 948 | 1006 (+6.1%) | 943 (−0.5%) | 975 (+2.8%) | 1271 (+34.0%) |
-| Cairo | 27° S | 1819 | 1754 (−3.6%) | 1709 (−6.1%) | 1768 (−2.8%) | 1481 (−18.6%) |
-| Sydney | 30° N | 1557 | 1506 (−3.3%) | 1463 (−6.0%) | 1514 (−2.7%) | 1538 (−1.2%) |
-| Johannesburg | 24° N | 1728 | 1783 (+3.1%) | 1752 (+1.4%) | 1812 (+4.8%) | 1423 (−17.7%) |
-| Lisbon | 35° W | 1293 | 1327 (+2.6%) | 1317 (+1.9%) | 1365 (+5.6%) | — |
-| Lisbon | 35° E | 1252 | 1327 (+6.0%) | 1317 (+5.2%) | 1365 (+9.0%) | — |
-| Lisbon | 15° N | 1154 | 1147 (−0.6%) | 1184 (+2.6%) | 1256 (+8.9%) | — |
-| Lisbon | flat | 1372 | 1363 (−0.6%) | 1363 (−0.6%) | 1432 (+4.4%) | — |
-| **Mean absolute error** | | | **2.8%** | 3.6% | 4.3% | 15.5% (7 sites) |
-| **Mean error, the 7 equator-facing arrays** | | | **−0.2%** | −3.8% | | |
+| Site | Tilt / facing | PVGIS kWh/kWp | The app: Hay–Davies, 2001–2025 | Hay–Davies, NASA climatology 2001–2020 | Isotropic sky | Isotropic, no reflection losses | Previous formula |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Lisbon | 35° S | 1579 | 1583 (+0.3%) | 1586 (+0.4%) | 1528 (−3.2%) | 1580 (+0.1%) | 1589 (+0.7%) |
+| Madrid | 36° S | 1620 | 1587 (−2.0%) | 1592 (−1.7%) | 1532 (−5.4%) | 1583 (−2.2%) | 1564 (−3.4%) |
+| Warsaw | 47° S | 1045 | 1025 (−1.9%) | 1021 (−2.3%) | 974 (−6.8%) | 1008 (−3.6%) | 1387 (+32.7%) |
+| Oslo | 54° S | 948 | 1012 (+6.7%) | 1006 (+6.1%) | 943 (−0.5%) | 975 (+2.8%) | 1271 (+34.0%) |
+| Cairo | 27° S | 1819 | 1754 (−3.5%) | 1754 (−3.6%) | 1709 (−6.1%) | 1768 (−2.8%) | 1481 (−18.6%) |
+| Sydney | 30° N | 1557 | 1502 (−3.5%) | 1506 (−3.3%) | 1463 (−6.0%) | 1514 (−2.7%) | 1538 (−1.2%) |
+| Johannesburg | 24° N | 1728 | 1773 (+2.6%) | 1783 (+3.1%) | 1752 (+1.4%) | 1812 (+4.8%) | 1423 (−17.7%) |
+| Lisbon | 35° W | 1293 | 1326 (+2.6%) | 1327 (+2.6%) | 1317 (+1.9%) | 1365 (+5.6%) | — |
+| Lisbon | 35° E | 1252 | 1326 (+5.9%) | 1327 (+6.0%) | 1317 (+5.2%) | 1365 (+9.0%) | — |
+| Lisbon | 15° N | 1154 | 1148 (−0.5%) | 1147 (−0.6%) | 1184 (+2.6%) | 1256 (+8.9%) | — |
+| Lisbon | flat | 1372 | 1363 (−0.6%) | 1363 (−0.6%) | 1363 (−0.6%) | 1432 (+4.4%) | — |
+| **Mean absolute error** | | | **2.8%** | 2.8% | 3.6% | 4.3% | 15.5% (7 sites) |
+| **Mean error, the 7 equator-facing arrays** | | | **−0.2%** | −0.2% | −3.8% | | |
 
-<sub>PVGIS 5.3 PVcalc, 14% losses. NASA climatology 2001–2020 at every site. Madrid's and Johannesburg's fixtures were recorded later, under the API's 2001–2025 label, but hold the same 2001–2020 means (issue #37, see [Yield model](#yield-model)).</sub>
+<sub>PVGIS 5.3 PVcalc, 14% losses. The app's column (issue #39) averages NASA's monthly data over 2001–2025; the other model columns use NASA's climatology, 2001–2020 at every site. The five extra years move the yields by −0.6 … +0.6% (Oslo +0.6%, Johannesburg −0.5%), and the mean absolute error stays 2.75%. Madrid's and Johannesburg's fixtures were recorded later, under the API's 2001–2025 label, but hold the same 2001–2020 means (issue #37, see [Yield model](#yield-model)).</sub>
 
 The previous formula only knew latitude and happened to be calibrated around Lisbon; it missed cloudy northern climates and sunny low latitudes by 18–34%.
 
@@ -215,7 +215,7 @@ The average year is not the whole story: lenders size a solar farm's debt on **P
 
 <sub>With the isotropic sky used before issue #35: Warsaw 990 / 936, Lisbon demo 1464 / 1417.</sub>
 
-As a consistency check, the mean of the yearly runs over 2001–2020 (Warsaw: 1025.8 kWh/kWp) matches the yield from the 2001–2020 climatology (1026.2) to 0.04%: the two requests describe the same data.
+The yield and the P50 now cover the same years. At Warsaw, 35° S, the yield of the 2001–2025 mean year is 1030.2 kWh/kWp and the P50 is 1029.8. The 0.04% between them is the model's non-linearity (temperature derating, the diffuse share): the yield of the average year is not quite the average of the yearly yields. Before issue #39 the yield came from NASA's 2001–2020 climatology, 1026.2, which put it 0.35% below the P50 for no reason but the five extra years.
 
 **What this P90 is not.** It is weather variability only. A bankable P90 also folds in the uncertainty of the yield model (see the PVGIS comparison above) and of the satellite irradiance, typically a few percent each, which would push it lower. Years NASA has not completed yet are left out.
 

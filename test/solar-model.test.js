@@ -63,7 +63,7 @@ test('annual yield is within 6% of PVGIS for off-optimal orientations', () => {
 
 // Madrid and Johannesburg were in the README's PVGIS table but had no fixture; PVGIS
 // PVcalc 5.3 (SARAH3) at these coordinates gives the same values, retrieved 2026-11-07.
-// Their NASA fixtures are the 2001–2025 climatology, the others 2001–2020.
+// Their NASA fixtures were recorded under the 2001–2025 label but hold the 2001–2020 means (#37).
 const PVGIS_ALL = [
   ...PVGIS,
   { name: 'madrid', lat: 40.42, tilt: 36, az: 180, kwh: 1619.51 },
@@ -271,6 +271,60 @@ test('the climatology labelled 2001–2025 is still the 2001–2020 mean', () =>
     assert.ok(gap(2020, 'ghi') < 0.001 && gap(2020, 'diffuse') < 0.001 && gap(2020, 'temp') < 0.01, site);
     assert.ok(gap(2025, 'ghi') > 0.04 && gap(2025, 'temp') > 0.2, site);
   }
+});
+
+// ─── Climatology from the monthly series (issue #39) ───
+
+const seriesClim = (name, last = Infinity) => M.climatologyFromSeries(
+  M.parsePowerMonthly(require(`./fixtures/nasa-power-monthly-${name}.json`)).filter(y => y.year <= last));
+
+test('the series averaged over 2001–2020 reproduces NASA\'s climatology at all seven sites', () => {
+  for (const site of PVGIS_ALL.map(r => r.name)) {
+    const ours = seriesClim(site, 2020);
+    assert.deepEqual(ours.period, { first: 2001, last: 2020, years: 20 });
+    const nasa = clim(site);
+    for (const key of ['ghi', 'diffuse', 'temp']) {
+      ours[key].forEach((v, m) => assert.ok(Math.abs(v - nasa[key][m]) < (key === 'temp' ? 0.01 : 0.001), `${site} ${key}[${m}]`));
+    }
+  }
+});
+
+// What the app computes since issue #39. Measured when written: mean absolute error 2.75 %
+// (2.75 % with NASA's 2001–2020 climatology), mean error of the 7 equator-facing arrays
+// −0.20 % (−0.16 %); yields move by −0.56 … +0.58 %.
+test('against PVGIS with the 2001–2025 series climatology the app uses', () => {
+  const err = ALL_CASES.map(r => M.monthlyYield(seriesClim(r.name), r.lat, r.tilt, r.az).annual / r.kwh - 1);
+  err.forEach((e, i) => assert.ok(Math.abs(e) < 0.07, `${ALL_CASES[i].name}: ${(e * 100).toFixed(1)}%`));
+  assert.ok(mean(err.map(Math.abs)) < 0.03, `MAE ${(mean(err.map(Math.abs)) * 100).toFixed(2)}%`);
+  assert.ok(Math.abs(mean(err.slice(0, PVGIS_ALL.length))) < 0.01);
+  for (const r of ALL_CASES) {
+    const shift = M.monthlyYield(seriesClim(r.name), r.lat, r.tilt, r.az).annual /
+      M.monthlyYield(clim(r.name), r.lat, r.tilt, r.az).annual - 1;
+    assert.ok(Math.abs(shift) < 0.01, `${r.name} moves ${(shift * 100).toFixed(2)}%`);
+  }
+});
+
+test('the series climatology covers the years given, and its yield sits next to the P50', () => {
+  const years = M.parsePowerMonthly(require('./fixtures/nasa-power-monthly-warsaw.json'));
+  const c = M.climatologyFromSeries(years);
+  assert.deepEqual(c.period, { first: 2001, last: 2025, years: 25 });
+  const fromClimatology = M.monthlyYield(c, 52.2297, 35, 180).annual;
+  const p50 = M.exceedance(M.yearlyYields(years, 52.2297, 35, 180).map(y => y.annual)).p50;
+  // The model is not linear in its inputs, so the yield of the mean year and the mean of
+  // the yearly yields differ a little: 0.04 % here, against 0.35 % with NASA's 2001–2020
+  // climatology next to a 2001–2025 P50.
+  assert.ok(Math.abs(fromClimatology / p50 - 1) < 0.001, `${fromClimatology} vs P50 ${p50}`);
+  const nasa = M.monthlyYield(clim('warsaw'), 52.2297, 35, 180).annual;
+  assert.ok(Math.abs(nasa / p50 - 1) > 0.003);
+});
+
+test('an incomplete year in between is left out and counted', () => {
+  const json = structuredClone(require('./fixtures/nasa-power-monthly-warsaw.json'));
+  json.properties.parameter.T2M['201007'] = -999;
+  const c = M.climatologyFromSeries(M.parsePowerMonthly(json));
+  assert.deepEqual(c.period, { first: 2001, last: 2025, years: 24 });
+  assert.throws(() => M.climatologyFromSeries(M.parsePowerMonthly(json).slice(0, 9)), /at least 10/);
+  assert.throws(() => M.climatologyFromSeries(undefined), /at least 10/);
 });
 
 test('exceedance: P50 is the mean, P90 is 1.2816 sample sigma below it', () => {
