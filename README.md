@@ -111,6 +111,8 @@ The browser fetches the site's monthly climatology from the [NASA POWER](https:/
 
 If NASA POWER can't be reached, the app falls back to the old latitude-based estimate and labels it as such.
 
+**Which years the climatology covers (issue #37).** Since late 2026 the API's header says the climatology covers January 2001 – December 2025. The numbers did not change, though: at Warsaw, Lisbon, Madrid and Johannesburg they equal the mean of NASA's own month-by-month data for **2001–2020**, to within 0.0002 kWh/m²/day. The 2001–2025 mean would differ by 0.04–0.11 kWh/m²/day in some months, and its temperatures by up to 0.6 °C. So the app keeps saying 2001–2020. `node tools/check-power-period.mjs [lat lon …]` repeats the comparison against the live API, and a test does the same on recorded responses.
+
 ### Validation against PVGIS
 
 [PVGIS 5.3](https://re.jrc.ec.europa.eu/pvg_tools/en/) (European Commission JRC) is the reference tool for PV yield in Europe and Africa. No parameter was fitted to it. The PVGIS API cannot be called from a browser (no CORS), which is why the app uses NASA POWER.
@@ -131,7 +133,7 @@ If NASA POWER can't be reached, the app falls back to the old latitude-based est
 | **Mean absolute error** | | | **2.8%** | 3.6% | 4.3% | 15.5% (7 sites) |
 | **Mean error, the 7 equator-facing arrays** | | | **−0.2%** | −3.8% | | |
 
-<sub>PVGIS 5.3 PVcalc, 14% losses. Madrid's and Johannesburg's NASA climatology (test fixtures added in issue #35) is the 2001–2025 one the API now returns; the other sites' fixtures are 2001–2020.</sub>
+<sub>PVGIS 5.3 PVcalc, 14% losses. NASA climatology 2001–2020 at every site. Madrid's and Johannesburg's fixtures were recorded later, under the API's 2001–2025 label, but hold the same 2001–2020 means (issue #37, see [Yield model](#yield-model)).</sub>
 
 The previous formula only knew latitude and happened to be calibrated around Lisbon; it missed cloudy northern climates and sunny low latitudes by 18–34%.
 
