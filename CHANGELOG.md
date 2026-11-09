@@ -49,6 +49,16 @@ All notable changes to this project are documented here. The format follows
   now 0.04%. Yields move by −0.6 … +0.6% at the validation sites; the mean absolute
   error against PVGIS stays 2.75%. NASA's climatology remains the fallback while the
   series loads or if it fails (#39).
+- **Beam spread over the day by the Collares-Pereira & Rabl distribution** instead of
+  as if the sky were as clear at sunrise as at noon. NASA's hourly data show the
+  clearness index falling from 0.66 near noon to 0.45 at 5–6 h from it, so low-sun
+  hours, which east and west arrays depend on, got too much beam. Against PVGIS: Lisbon
+  east +5.9% → +1.9%, west +2.6% → −1.4%, mean absolute error over 11 cases 2.75% →
+  2.20%. Equator-facing yields rise by 0.4–1.6% (Warsaw P50 1030 → 1043 kWh/kWp, Oslo
+  now +8.4%), and the terrain-shading gap at Zermatt grows to 5.0 points. The old
+  weighting stays available as `beamProfile: 'constant-clearness'`. PVGIS's remaining
+  west-over-east advantage is real (clearer afternoons, in NASA's data too), not a
+  time-stamp artefact, and is not modelled (#41).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said
