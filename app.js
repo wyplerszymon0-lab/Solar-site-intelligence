@@ -1448,7 +1448,7 @@ function buildInitialPrompt(stats) {
     (stats.ghiAnnual != null
       ? `ANNUAL GLOBAL HORIZONTAL IRRADIATION: ${stats.ghiAnnual} kWh/m² (${stats.climPeriod?.fromSeries
         ? `mean of NASA POWER monthly data ${periodLabel(stats.climPeriod)}, the same years as the P50/P90`
-        : `NASA POWER climatology, ${periodLabel(stats.climPeriod ?? NASA_CLIMATOLOGY_PERIOD)} means`}; yield via Hay–Davies anisotropic-sky transposition, ${stats.systemLossPct}% system losses, temperature derating)\n`
+        : `NASA POWER climatology, ${periodLabel(stats.climPeriod ?? NASA_CLIMATOLOGY_PERIOD)} means`}; yield via Hay–Davies anisotropic-sky transposition with the beam spread over the day by the Collares-Pereira & Rabl distribution, ${stats.systemLossPct}% system losses, temperature derating)\n`
       : `YIELD SOURCE: rough latitude-based estimate (satellite data unavailable)\n`) +
     `SYSTEM LOSSES (user setting: wiring, inverter, soiling, mismatch): ${stats.systemLossPct}%\n` +
     (stats.variability

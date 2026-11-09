@@ -98,25 +98,38 @@ test('horizonAt interpolates and wraps round at north', () => {
 
 // ─── Against PVGIS: the shading physics with PVGIS's own horizon as input ───
 
-// Measured when written: isotropic mean gap 1.63 points (largest 3.7, Zermatt);
-// Hay–Davies 1.96 (largest 4.6, Chamonix), because it also shades the circumsolar light,
-// which PVGIS appears not to. These limits guard against regressions; they were not tuned.
-const HORIZON_LIMITS = { isotropic: { site: 4, mean: 2 }, 'hay-davies': { site: 5, mean: 2.5 } };
+// Measured when written, mean gap / largest gap in percentage points:
+//  - constant clearness: isotropic 1.63 / 3.7 (Zermatt); Hay–Davies 1.96 / 4.6 (Chamonix),
+//    because it also shades the circumsolar light, which PVGIS appears not to.
+//  - diurnal beam profile (issue #41, the default): isotropic 2.39 / 6.4 (Zermatt);
+//    Hay–Davies 1.86 / 5.0 (Zermatt). Less beam at low sun means less loss to a skyline
+//    that hides the morning and evening sun, as Zermatt's north–south valley does;
+//    PVGIS, with real hours of clear alpine air, loses more there.
+// These limits guard against regressions; they were not tuned.
+const HORIZON_LIMITS = {
+  'isotropic/constant-clearness': { site: 4, mean: 2 },
+  'hay-davies/constant-clearness': { site: 5, mean: 2.5 },
+  'isotropic/collares-pereira-rabl': { site: 7, mean: 3 },
+  'hay-davies/collares-pereira-rabl': { site: 5.5, mean: 2.5 },
+};
 
 test('yield loss from a skyline matches PVGIS within ~2 points at five mountain sites', () => {
   const { sites } = require('./fixtures/horizon-physics-pvgis.json');
   for (const skyModel of M.SKY_MODELS) {
-    const limit = HORIZON_LIMITS[skyModel];
-    const gaps = sites.map(s => {
-      const clim = M.parsePowerClimatology(s.climatology);
-      const open = M.monthlyYield(clim, s.lat, 35, 180, { skyModel }).annual;
-      const shaded = M.monthlyYield(clim, s.lat, 35, 180, { skyModel, horizon: s.pvgisHorizon }).annual;
-      const ours = (shaded / open - 1) * 100, pvgis = (s.pvgisShaded / s.pvgisOpen - 1) * 100;
-      assert.ok(Math.abs(ours - pvgis) < limit.site, `${skyModel} ${s.name}: ${ours.toFixed(1)}% vs PVGIS ${pvgis.toFixed(1)}%`);
-      return Math.abs(ours - pvgis);
-    });
-    const mean = gaps.reduce((a, b) => a + b) / gaps.length;
-    assert.ok(mean < limit.mean, `${skyModel} mean gap ${mean.toFixed(2)} points`);
+    for (const beamProfile of M.BEAM_PROFILES) {
+      const limit = HORIZON_LIMITS[`${skyModel}/${beamProfile}`];
+      const gaps = sites.map(s => {
+        const clim = M.parsePowerClimatology(s.climatology);
+        const open = M.monthlyYield(clim, s.lat, 35, 180, { skyModel, beamProfile }).annual;
+        const shaded = M.monthlyYield(clim, s.lat, 35, 180, { skyModel, beamProfile, horizon: s.pvgisHorizon }).annual;
+        const ours = (shaded / open - 1) * 100, pvgis = (s.pvgisShaded / s.pvgisOpen - 1) * 100;
+        assert.ok(Math.abs(ours - pvgis) < limit.site,
+          `${skyModel}/${beamProfile} ${s.name}: ${ours.toFixed(1)}% vs PVGIS ${pvgis.toFixed(1)}%`);
+        return Math.abs(ours - pvgis);
+      });
+      const mean = gaps.reduce((a, b) => a + b) / gaps.length;
+      assert.ok(mean < limit.mean, `${skyModel}/${beamProfile} mean gap ${mean.toFixed(2)} points`);
+    }
   }
 });
 

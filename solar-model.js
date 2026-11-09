@@ -5,7 +5,8 @@
 // Hay–Davies anisotropic sky by default, or the isotropic sky (Liu & Jordan;
 // Duffie & Beckman, "Solar Engineering of Thermal Processes", §2.16, §2.19). The beam tilt factor R_b is integrated over the
 // day of each month's recommended average date, which handles any tilt,
-// azimuth and hemisphere with one formula. Reflection losses at the module
+// azimuth and hemisphere with one formula, with the beam spread over the day by the
+// Collares-Pereira & Rabl distribution (see beamTiltFactor). Reflection losses at the module
 // glass use the ASHRAE incidence-angle modifier. Validated against PVGIS in
 // the README. Works in the browser (window.SolarModel) and in Node (require).
 
@@ -25,8 +26,10 @@
     iamB0: 0.05,             // ASHRAE incidence-angle modifier for glass-covered modules; 0 disables it
     horizon: null,           // skyline profile (see horizonAt); null = open horizon
     skyModel: 'hay-davies',  // diffuse light: 'isotropic' or 'hay-davies' (see monthlyYield)
+    beamProfile: 'collares-pereira-rabl', // beam over the day: or 'constant-clearness' (see beamTiltFactor)
   };
   const SKY_MODELS = ['isotropic', 'hay-davies'];
+  const BEAM_PROFILES = ['constant-clearness', 'collares-pereira-rabl'];
   const SOLAR_CONSTANT = 1.367; // kW/m² (Duffie & Beckman §1.2)
 
   function declination(n) {
@@ -89,28 +92,56 @@
   // Only the beam is shaded: also removing the sky behind the skyline from the
   // isotropic diffuse doubled the gap to PVGIS at five mountain sites (README).
   // tilt in degrees; compassAz in degrees (0 = N, 90 = E, 180 = S).
-  function beamTiltFactor(lat, tilt, compassAz, n, b0 = 0, horizon = null) {
+  //
+  // How the day's beam is spread over the hours (issue #41). With no `day`, or with
+  // `day.profile` 'constant-clearness', each moment is weighted by cos Z, as if the sky
+  // were as clear at sunrise as at noon. It is not: through more air mass, the beam
+  // fades towards the horizon (NASA's hourly clearness index at Lisbon: 0.66 within an
+  // hour of noon, 0.45 at 5–6 h), and constant clearness gives the low-sun hours, which
+  // east- and west-facing arrays depend on, too much beam. 'collares-pereira-rabl'
+  // weights them by the hourly beam of the mean day instead: the Collares-Pereira & Rabl
+  // (1979) distribution of the global irradiation H minus the Liu & Jordan (1960) one
+  // of the diffuse Hd (Duffie & Beckman eqs. 2.13.1–2.13.2), floored at zero.
+  // day = { H, Hd, profile } in any one unit; only their ratio matters.
+  function beamTiltFactor(lat, tilt, compassAz, n, b0 = 0, horizon = null, day = null) {
     const phi = lat * DEG, beta = tilt * DEG;
     const gamma = (compassAz - 180) * DEG; // surface azimuth from south, west positive
     const d = declination(n) * DEG;
+    const cosZAt = (omega) => Math.cos(phi) * Math.cos(d) * Math.cos(omega) + Math.sin(phi) * Math.sin(d);
+    const shaped = day && day.profile === 'collares-pereira-rabl' && day.H > day.Hd;
+    let a = 0, b = 0, globalNorm = 0, diffuseNorm = 0;
+    if (shaped) {
+      const ws = Math.acos(Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(d)))); // sunset hour angle
+      a = 0.409 + 0.5016 * Math.sin(ws - Math.PI / 3);
+      b = 0.6609 - 0.4767 * Math.sin(ws - Math.PI / 3);
+      // Normalised on the same grid as below, so the two distributions sum to H and Hd.
+      for (let w = -180; w < 180; w += 0.5) {
+        const cz = cosZAt(w * DEG);
+        if (cz > 0) { globalNorm += (a + b * Math.cos(w * DEG)) * cz; diffuseNorm += cz; }
+      }
+    }
     let onPlane = 0, onHorizontal = 0;
     for (let w = -180; w < 180; w += 0.5) {
       const omega = w * DEG;
-      const cosZ = Math.cos(phi) * Math.cos(d) * Math.cos(omega) + Math.sin(phi) * Math.sin(d);
+      const cosZ = cosZAt(omega);
       if (cosZ <= 0) continue; // sun below the horizon
+      // Beam on the horizontal at this moment, up to a constant factor.
+      const beam = shaped
+        ? cosZ * Math.max(0, (a + b * Math.cos(omega)) * day.H / globalNorm - day.Hd / diffuseNorm)
+        : cosZ;
       const cosT =
         Math.sin(d) * Math.sin(phi) * Math.cos(beta) -
         Math.sin(d) * Math.cos(phi) * Math.sin(beta) * Math.cos(gamma) +
         Math.cos(d) * Math.cos(phi) * Math.cos(beta) * Math.cos(omega) +
         Math.cos(d) * Math.sin(phi) * Math.sin(beta) * Math.cos(gamma) * Math.cos(omega) +
         Math.cos(d) * Math.sin(beta) * Math.sin(gamma) * Math.sin(omega);
-      onHorizontal += cosZ;
+      onHorizontal += beam;
       if (horizon) {
         // Sun azimuth from south, west positive, then as a compass bearing.
         const azS = Math.atan2(Math.sin(omega) * Math.cos(d), Math.sin(phi) * Math.cos(d) * Math.cos(omega) - Math.cos(phi) * Math.sin(d));
         if (Math.asin(Math.min(1, cosZ)) / DEG < horizonAt(horizon, azS / DEG + 180)) continue;
       }
-      onPlane += Math.max(0, cosT) * (b0 > 0 ? incidenceModifier(cosT, b0) : 1);
+      onPlane += (beam / cosZ) * Math.max(0, cosT) * (b0 > 0 ? incidenceModifier(cosT, b0) : 1);
     }
     return onHorizontal > 0 ? onPlane / onHorizontal : 0;
   }
@@ -127,13 +158,14 @@
   function monthlyYield(climatology, lat, tilt, compassAz, options = {}) {
     const o = { ...DEFAULTS, ...options };
     if (!SKY_MODELS.includes(o.skyModel)) throw new Error(`unknown sky model: ${o.skyModel}`);
+    if (!BEAM_PROFILES.includes(o.beamProfile)) throw new Error(`unknown beam profile: ${o.beamProfile}`);
     const cosB = Math.cos(tilt * DEG);
     const kSky = (o.iamB0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), o.iamB0) : 1);
     const kGround = o.iamB0 > 0 ? incidenceModifier(Math.cos(groundIncidenceDeg(tilt) * DEG), o.iamB0) : 1;
     const months = MEAN_DAY.map((n, m) => {
       const H = climatology.ghi[m];
       const Hd = Math.min(climatology.diffuse[m], H);
-      const Rb = beamTiltFactor(lat, tilt, compassAz, n, o.iamB0, o.horizon);
+      const Rb = beamTiltFactor(lat, tilt, compassAz, n, o.iamB0, o.horizon, { H, Hd, profile: o.beamProfile });
       const H0 = extraterrestrialDaily(lat, n);
       const A = o.skyModel === 'hay-davies' && H0 > 0 ? Math.min(1, (H - Hd) / H0) : 0;
       const poaDaily = (H - Hd) * Rb +
@@ -276,7 +308,7 @@
     beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
     powerMonthlyUrl, parsePowerMonthly, climatologyFromSeries, yearlyYields, exceedance, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
-    extraterrestrialDaily, SKY_MODELS,
+    extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;
