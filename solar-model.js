@@ -283,6 +283,29 @@
     return { n, mean, sd, cov: sd / mean, p50: mean, p90: mean - Z_P90 * sd, p90Empirical, min: sorted[0], max: sorted[n - 1] };
   }
 
+  // Uncertainty of the yield estimate itself, model and satellite irradiance together, as a
+  // fraction of the yield (issue #43). It is the RMS error of this model against PVGIS 5.3
+  // at the seven independent equator-facing validation sites: 3.8% when measured (2.3%
+  // without Oslo, where NASA's irradiance is 2.5% above PVGIS's). A test recomputes it.
+  // PVGIS is a reference, not the truth, so its own error is part of this number; seven
+  // sites are a small sample; and using it elsewhere is an extrapolation from Europe,
+  // North Africa, South Africa and Australia.
+  const ESTIMATE_UNCERTAINTY = 0.038;
+
+  // P90 over an N-year horizon, with the uncertainty of the estimate: the weather's
+  // year-to-year σ shrinks as σ/√N when years are averaged, an error in the estimate
+  // does not, and the two are independent, so they add in quadrature. years = 1 is one
+  // bad year; years = 10 is the long-term P90 of energy assessments, the average of ten.
+  // e is exceedance()'s result. Leaves out degradation, soiling and availability.
+  function exceedanceWithEstimate(e, years = 1, estimate = ESTIMATE_UNCERTAINTY) {
+    if (!(years >= 1)) throw new Error('years must be at least 1');
+    if (!(estimate >= 0)) throw new Error('estimate uncertainty must not be negative');
+    const sigmaWeather = e.sd / Math.sqrt(years);
+    const sigmaEstimate = estimate * e.mean;
+    const sigma = Math.hypot(sigmaWeather, sigmaEstimate);
+    return { years, sigma, sigmaWeather, sigmaEstimate, p50: e.mean, p90: e.mean - Z_P90 * sigma };
+  }
+
   // User-entered system losses in percent (input field or localStorage) as a
   // fraction for monthlyYield. Anything unusable falls back to the default;
   // values are clamped to 0–40%, beyond which the setting is surely a typo.
@@ -306,7 +329,8 @@
 
   const api = {
     beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
-    powerMonthlyUrl, parsePowerMonthly, climatologyFromSeries, yearlyYields, exceedance, FIRST_SERIES_YEAR, horizonAt, sunPath,
+    powerMonthlyUrl, parsePowerMonthly, climatologyFromSeries, yearlyYields, exceedance,
+    exceedanceWithEstimate, ESTIMATE_UNCERTAINTY, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
     extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES,
   };

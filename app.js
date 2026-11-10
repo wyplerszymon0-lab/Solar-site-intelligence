@@ -87,7 +87,7 @@ const I18N = {
     'stat.benchmark': 'Yield vs optimal orientation at this site',
     'stat.p90': 'P50 / P90, kWh/kWp per year',
     'stat.p90Years': 'P50 / P90, kWh/kWp per year ({first}–{last})',
-    'stat.p90Title': 'Same model run on each year {first}–{last}. P50 is the average year; P90 is exceeded in 9 years out of 10 (normal approximation, σ {cov}%; empirical: {emp}). Weather only: model and satellite-data uncertainty would widen it.',
+    'stat.p90Title': 'Same model run on each year {first}–{last}. P50 is the average year. P90 is exceeded in 9 years out of 10, counting the weather (σ {cov}%) and the {est}% uncertainty of the estimate itself, measured against PVGIS. Weather alone: {weather} (empirical: {emp}). Average of 10 years: {longTerm}.',
     'econ.label': 'Economics (your prices)',
     'econ.currency': 'CURRENCY',
     'econ.capex': 'INVESTMENT / kWp',
@@ -107,7 +107,7 @@ const I18N = {
     'econ.irr': 'IRR (real)',
     'econ.never': 'not within lifetime',
     'econ.years': '{n} yr',
-    'econ.resultNote': '{years} years, {deg}% degradation a year. P90 uses the yield of a poor year (1 in 10) every year: a cautious case, not a forecast.',
+    'econ.resultNote': '{years} years, {deg}% degradation a year. P90 is the 10-year P90 every year: the average yield exceeded with 90% confidence, weather and estimate uncertainty included. A cautious case, not a forecast.',
     'charts.horizon': 'Horizon and Sun Path',
     'charts.horizonSkyline': 'skyline',
     'horizon.btn': '⛰ Compute horizon from terrain',
@@ -136,7 +136,7 @@ const I18N = {
     'charts.empty': 'Not enough data',
     'charts.yearly': 'Annual Yield by Year',
     'charts.yearlyNeedsData': 'Needs year-by-year satellite data',
-    'charts.yearlyBelowP90': 'below P90',
+    'charts.yearlyBelowP90': 'below the weather-only P90',
     'charts.compassAvg': 'Avg azimuth',
     'charts.compassOptimal': 'Optimal',
     'rating.good': 'Good',
@@ -264,7 +264,7 @@ const I18N = {
     'stat.benchmark': 'Wydajność vs optymalna orientacja w tym miejscu',
     'stat.p90': 'P50 / P90, kWh/kWp rocznie',
     'stat.p90Years': 'P50 / P90, kWh/kWp rocznie ({first}–{last})',
-    'stat.p90Title': 'Ten sam model policzony dla każdego roku {first}–{last}. P50 to przeciętny rok; P90 jest przekraczany w 9 latach na 10 (przybliżenie normalne, σ {cov}%; empirycznie: {emp}). Tylko zmienność pogody: niepewność modelu i danych satelitarnych by ją poszerzyła.',
+    'stat.p90Title': 'Ten sam model policzony dla każdego roku {first}–{last}. P50 to przeciętny rok. P90 jest przekraczany w 9 latach na 10, licząc pogodę (σ {cov}%) i {est}% niepewności samego szacunku, zmierzonej względem PVGIS. Sama pogoda: {weather} (empirycznie: {emp}). Średnia z 10 lat: {longTerm}.',
     'econ.label': 'Ekonomia (twoje ceny)',
     'econ.currency': 'WALUTA',
     'econ.capex': 'INWESTYCJA / kWp',
@@ -284,7 +284,7 @@ const I18N = {
     'econ.irr': 'IRR (realna)',
     'econ.never': 'nie w okresie życia',
     'econ.years': '{n} lat',
-    'econ.resultNote': '{years} lat, degradacja {deg}% rocznie. P90 zakłada uzysk słabego roku (1 na 10) co roku: wariant ostrożny, nie prognoza.',
+    'econ.resultNote': '{years} lat, degradacja {deg}% rocznie. P90 to 10-letnie P90 co roku: średni uzysk przekraczany z 90% pewnością, z niepewnością pogody i szacunku. Wariant ostrożny, nie prognoza.',
     'charts.horizon': 'Horyzont i droga słońca',
     'charts.horizonSkyline': 'linia horyzontu',
     'horizon.btn': '⛰ Policz horyzont z terenu',
@@ -313,7 +313,7 @@ const I18N = {
     'charts.empty': 'Za mało danych',
     'charts.yearly': 'Roczny uzysk w kolejnych latach',
     'charts.yearlyNeedsData': 'Wymaga danych satelitarnych rok po roku',
-    'charts.yearlyBelowP90': 'poniżej P90',
+    'charts.yearlyBelowP90': 'poniżej P90 samej pogody',
     'charts.compassAvg': 'Śr. azymut',
     'charts.compassOptimal': 'Optymalny',
     'rating.good': 'Dobra',
@@ -587,7 +587,7 @@ function economicsFor(stats) {
   return {
     inputs,
     p50: run(stats.variability ? stats.variability.p50 : stats.yieldEst),
-    p90: stats.variability ? run(stats.variability.p90) : null,
+    p90: stats.variability ? run(stats.variability.p90LongTerm) : null, // issue #43: the 10-year P90
   };
 }
 
@@ -842,9 +842,14 @@ function computeSiteStats(data) {
   if (yieldSource === 'satellite' && series && typeof series === 'object') {
     const years = SolarModel.yearlyYields(series.years, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz, modelOptions);
     const e = SolarModel.exceedance(years.map(y => y.annual));
+    // p90 is the weather alone (the chart's line: 9 years in 10 above it); p90Year and
+    // p90LongTerm add the uncertainty of the estimate, for one year and for ten (issue #43).
     variability = {
       years: years.map(y => ({ year: y.year, annual: Math.round(y.annual) })),
       p50: Math.round(e.p50), p90: Math.round(e.p90), p90Empirical: Math.round(e.p90Empirical),
+      p90Year: Math.round(SolarModel.exceedanceWithEstimate(e, 1).p90),
+      p90LongTerm: Math.round(SolarModel.exceedanceWithEstimate(e, 10).p90),
+      estimatePct: Math.round(SolarModel.ESTIMATE_UNCERTAINTY * 1000) / 10,
       covPct: Math.round(e.cov * 1000) / 10, first: years[0].year, last: years.at(-1).year,
     };
   }
@@ -1309,10 +1314,13 @@ function renderStats(data, stats) {
   document.getElementById('stat-rows').textContent      = stats.rows ?? '—';
 
   const v = stats.variability;
-  document.getElementById('stat-p90').textContent = v ? `${v.p50.toLocaleString()} / ${v.p90.toLocaleString()}` : '—';
+  document.getElementById('stat-p90').textContent = v ? `${v.p50.toLocaleString()} / ${v.p90Year.toLocaleString()}` : '—';
   document.getElementById('stat-p90-label').textContent = v ? t('stat.p90Years', { first: v.first, last: v.last }) : t('stat.p90');
   document.getElementById('stat-p90-card').title = v
-    ? t('stat.p90Title', { first: v.first, last: v.last, cov: v.covPct, emp: v.p90Empirical.toLocaleString() })
+    ? t('stat.p90Title', {
+      first: v.first, last: v.last, cov: v.covPct, est: v.estimatePct, emp: v.p90Empirical.toLocaleString(),
+      weather: v.p90.toLocaleString(), longTerm: v.p90LongTerm.toLocaleString(),
+    })
     : '';
 
   const rowsCard = document.getElementById('stat-rows-card');
@@ -1453,9 +1461,11 @@ function buildInitialPrompt(stats) {
     `SYSTEM LOSSES (user setting: wiring, inverter, soiling, mismatch): ${stats.systemLossPct}%\n` +
     (stats.variability
       ? `YEAR-TO-YEAR YIELD AT MEASURED ORIENTATION (same model on each year ${stats.variability.first}–${stats.variability.last}): ` +
-        `P50 ${stats.variability.p50}, P90 ${stats.variability.p90} kWh/kWp/yr (normal approximation; empirical 10th percentile ` +
-        `${stats.variability.p90Empirical}), year-to-year variation ${stats.variability.covPct}%. Weather variability only, ` +
-        `not model or data uncertainty.\n`
+        `P50 ${stats.variability.p50} kWh/kWp/yr, year-to-year variation ${stats.variability.covPct}%. ` +
+        `P90 from the weather alone ${stats.variability.p90} (normal approximation; empirical 10th percentile ${stats.variability.p90Empirical}). ` +
+        `With the ${stats.variability.estimatePct}% uncertainty of the estimate itself (model and satellite data, the RMS error against PVGIS ` +
+        `at seven sites, in quadrature): 1-year P90 ${stats.variability.p90Year}, 10-year P90 ${stats.variability.p90LongTerm}. ` +
+        `Degradation, soiling and availability uncertainty are not included.\n`
       : '') +
     (stats.economics ? economicsPromptLine(stats.economics) : '') +
     (stats.horizon && stats.horizonLossPct != null
@@ -1476,7 +1486,7 @@ function economicsPromptLine(econ) {
   return `ECONOMICS PER kWp (user's prices, real terms; no taxes, subsidies or financing): investment ${i.capex} ${cur}, ` +
     `energy value ${i.price} ${cur}/kWh, O&M ${i.om} ${cur}/yr, discount rate ${+(i.rate * 100).toFixed(2)}%, ` +
     `degradation ${+(i.degradation * 100).toFixed(2)}%/yr, ${i.lifetime} years. P50: ${fmt(econ.p50)}` +
-    (econ.p90 ? `. P90 yield every year: ${fmt(econ.p90)}` : '') + `.\n`;
+    (econ.p90 ? `. 10-year P90 yield every year: ${fmt(econ.p90)}` : '') + `.\n`;
 }
 
 // ─── Analyze (streaming + prompt caching + follow-up chat) ─
