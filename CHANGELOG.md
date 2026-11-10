@@ -59,6 +59,13 @@ All notable changes to this project are documented here. The format follows
   weighting stays available as `beamProfile: 'constant-clearness'`. PVGIS's remaining
   west-over-east advantage is real (clearer afternoons, in NASA's data too), not a
   time-stamp artefact, and is not modelled (#41).
+- **P90 with the uncertainty of the estimate, for 1 and 10 years.** The weather's
+  year-to-year σ (divided by √10 over ten years) and a 3.8% uncertainty of the estimate
+  itself (the model's RMS error against PVGIS at seven sites; 2.3% without Oslo) add in
+  quadrature. The P90 card shows the 1-year P90 (Warsaw 35° S: 965 kWh/kWp, was 984
+  weather-only), the tooltip the weather-only and 10-year P90 (989), and the economics
+  use the 10-year P90 instead of a bad year every year. AI prompt and README explain
+  which is which and what is still left out (#43).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said

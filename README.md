@@ -228,19 +228,35 @@ Spreading the beam over the day (issue #41) puts less of it at low sun, so a sky
 
 The average year is not the whole story: lenders size a solar farm's debt on **P90**, the annual yield exceeded in 9 years out of 10. The app fetches NASA POWER's month-by-month values for every year since 2001 (the CERES-based record the climatology also comes from; earlier years use another satellite product and would mix two records), runs the same yield model on each year at the surveyed orientation, and reports:
 
-- **P50** = the mean, **P90** = mean − 1.2816 σ (normal approximation, the usual convention), with the empirical 10th percentile in the tooltip and the AI prompt as a check;
-- a chart of each year's yield with the P50 and P90 lines, years below P90 in red.
+- **P50** = the mean;
+- **P90** = mean − 1.2816 σ (normal approximation, the usual convention), where σ combines the weather's year-to-year spread with the uncertainty of the estimate itself ([below](#adding-the-uncertainty-of-the-estimate-issue-43)). The card shows the 1-year P90; the tooltip adds the weather-only P90, its empirical 10th percentile as a check, and the 10-year P90; the economics use the 10-year P90;
+- a chart of each year's yield with the P50 and the weather-only P90 lines, years below that P90 in red.
 
-| Site | Years | P50 | P90 | Year-to-year σ | Empirical 10th pct. |
-|------|-------|-----|-----|----------------|---------------------|
-| Warsaw, 35° S | 2001–2025 | 1043 | 984 (−5.6%) | 4.4% | 979 |
-| Lisbon demo, surveyed 11.9° / 175° | 2001–2025 | 1500 | 1451 (−3.3%) | 2.5% | 1450 |
+| Site | Years | P50 | Year-to-year σ | P90, weather only | Empirical 10th pct. | **P90, 1 year** | P90, 10 years |
+|------|-------|-----|----------------|-------------------|---------------------|-----------------|---------------|
+| Warsaw, 35° S | 2001–2025 | 1043 | 4.4% | 984 (−5.6%) | 979 | **965 (−7.4%)** | 989 (−5.2%) |
+| Lisbon demo, surveyed 11.9° / 175° | 2001–2025 | 1500 | 2.5% | 1451 (−3.3%) | 1450 | **1412 (−5.9%)** | 1425 (−5.0%) |
 
-<sub>With constant clearness, before issue #41: Warsaw 1030 / 972, Lisbon demo 1489 / 1440. With the isotropic sky, before issue #35: Warsaw 990 / 936, Lisbon demo 1464 / 1417.</sub>
+<sub>Weather-only P50 / P90 with constant clearness, before issue #41: Warsaw 1030 / 972, Lisbon demo 1489 / 1440. With the isotropic sky, before issue #35: Warsaw 990 / 936, Lisbon demo 1464 / 1417.</sub>
 
 The yield and the P50 now cover the same years. At Warsaw, 35° S, the yield of the 2001–2025 mean year is 1043.1 kWh/kWp and the P50 is 1042.7. The 0.04% between them is the model's non-linearity (temperature derating, the diffuse share): the yield of the average year is not quite the average of the yearly yields. Before issue #39 the yield came from NASA's 2001–2020 climatology, 1026.2, which put it 0.35% below the P50 for no reason but the five extra years.
 
-**What this P90 is not.** It is weather variability only. A bankable P90 also folds in the uncertainty of the yield model (see the PVGIS comparison above) and of the satellite irradiance, typically a few percent each, which would push it lower. Years NASA has not completed yet are left out.
+#### Adding the uncertainty of the estimate (issue #43)
+
+The spread between years is not the only uncertainty: the yield estimate itself, model and satellite irradiance together, can be off. Lenders' energy assessments add it to the weather and quote two numbers:
+
+- **1-year P90**: σ = √(σ_weather² + σ_estimate²). One bad year, for debt service in any single year.
+- **10-year P90**: σ = √((σ_weather/√10)² + σ_estimate²). Over ten years the weather averages out, but an error in the estimate does not.
+
+**σ_estimate = 3.8%** of the yield is measured, not assumed. It is the RMS error of the app's model against PVGIS 5.3 at the seven independent equator-facing sites of the [validation](#validation-against-pvgis) (mean error +0.6%), and a test recomputes it. Its limits:
+
+- **PVGIS is a reference, not the truth.** Its own error is inside this number, in one direction or the other.
+- **Seven sites are a small sample, and Oslo dominates.** Without Oslo, where NASA's irradiance is 2.5% above PVGIS's, the RMS is 2.3%.
+- **It is an extrapolation elsewhere.** Using it at any site on Earth extrapolates from Europe, North Africa, South Africa and Australia, and from a 1 kWp array at the stated orientations.
+
+The two sites in the table show why both numbers matter. In Warsaw the weather varies a lot (σ 4.4%), so the 10-year P90 (989) is above the weather-only P90 (984): averaging ten years removes more uncertainty than the estimate adds. Lisbon's weather is steady (σ 2.5%), so the estimate dominates, and even the 10-year P90 (1425) is well below the weather-only one (1451).
+
+Still left out: the uncertainty of degradation, soiling, availability and curtailment, and any correlation between years. Years NASA has not completed yet are left out of the series.
 
 ## Economics (per kWp, your prices)
 
@@ -252,7 +268,7 @@ With yield *Y* (kWh/kWp in year 1), degradation *d*, O&M cost *M* per year, pric
 - **LCOE** = (*C* + Σ *M* / (1+*r*)<sup>*t*</sup>) / Σ *E<sub>t</sub>* / (1+*r*)<sup>*t*</sup>: selling at the LCOE gives NPV = 0, which the tests check
 - **NPV** at *r*, **IRR** (the rate where NPV = 0, by bisection; negative for a project that never earns its investment back), **payback** (years until the cumulative cash turns positive, interpolated within the year)
 
-Each is shown for the **P50** and the **P90** yield (see above). P90 applies a poor year's yield to every year, so it is a cautious case rather than a forecast.
+Each is shown for the **P50** and the **10-year P90** yield (see above): the average yield exceeded with 90% confidence, weather and estimate uncertainty included, applied to every year. It is a cautious case rather than a forecast.
 
 Defaults only where a typical value is defensible: degradation **0.5 % a year** (the median of field measurements in Jordan & Kurtz, "Photovoltaic Degradation Rates — an Analytical Review", NREL 2013) and a **25-year** lifetime (the usual module performance warranty). O&M defaults to 0. Investment, energy value and discount rate have no default.
 

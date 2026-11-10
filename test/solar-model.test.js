@@ -394,6 +394,45 @@ test('Warsaw: about 4 % year-to-year variation, P90 about 5 % below P50', () => 
   assert.ok(Math.abs(e.p90Empirical - e.p90) / e.p50 < 0.02); // the normal assumption holds here
 });
 
+// ─── P90 with the uncertainty of the estimate (issue #43) ───
+
+test('the estimate uncertainty is the RMS error against PVGIS at the seven sites', () => {
+  // The app's model (2001–2025 series, defaults) at the seven independent equator-facing sites.
+  const err = PVGIS_ALL.map(r => M.monthlyYield(seriesClim(r.name), r.lat, r.tilt, r.az).annual / r.kwh - 1);
+  const rms = Math.sqrt(mean(err.map(e => e * e)));
+  assert.ok(Math.abs(rms - M.ESTIMATE_UNCERTAINTY) < 0.0015, `RMS ${(rms * 100).toFixed(2)}% vs constant ${M.ESTIMATE_UNCERTAINTY * 100}%`);
+  // Oslo dominates it: without Oslo the RMS is about 2.3 %.
+  const rest = err.filter((_, i) => PVGIS_ALL[i].name !== 'oslo');
+  assert.ok(Math.sqrt(mean(rest.map(e => e * e))) < 0.025);
+});
+
+test('weather shrinks as 1/√N over N years, the estimate does not; they add in quadrature', () => {
+  const e = { mean: 1000, sd: 40 };
+  const one = M.exceedanceWithEstimate(e, 1, 0.03);
+  assert.equal(one.sigmaWeather, 40);
+  assert.ok(Math.abs(one.sigmaEstimate - 30) < 1e-9);
+  assert.ok(Math.abs(one.sigma - 50) < 1e-9);                       // 3-4-5
+  assert.ok(Math.abs(one.p90 - (1000 - 1.2816 * 50)) < 1e-9);
+  const ten = M.exceedanceWithEstimate(e, 10, 0.03);
+  assert.ok(Math.abs(ten.sigmaWeather - 40 / Math.sqrt(10)) < 1e-9);
+  assert.ok(Math.abs(ten.sigma - Math.hypot(40 / Math.sqrt(10), 30)) < 1e-9);
+  // No estimate error: the 1-year P90 is the weather-only P90.
+  assert.ok(Math.abs(M.exceedanceWithEstimate(e, 1, 0).p90 - (1000 - 1.2816 * 40)) < 1e-9);
+  // Over a very long horizon only the estimate is left.
+  assert.ok(Math.abs(M.exceedanceWithEstimate(e, 1e9, 0.03).sigma - 30) < 1e-3);
+  assert.throws(() => M.exceedanceWithEstimate(e, 0), /at least 1/);
+  assert.throws(() => M.exceedanceWithEstimate(e, 1, -0.01), /negative/);
+});
+
+test('Warsaw: the 1-year P90 drops below the weather-only one, the 10-year P90 sits above it', () => {
+  const e = M.exceedance(M.yearlyYields(warsawYears(), 52.2297, 35, 180).map(y => y.annual));
+  const year = M.exceedanceWithEstimate(e, 1), longTerm = M.exceedanceWithEstimate(e, 10);
+  // When written: P50 1043, weather-only P90 984, 1-year 965, 10-year 989 kWh/kWp.
+  assert.ok(year.p90 < e.p90 - 10, `${year.p90} vs ${e.p90}`);
+  assert.ok(longTerm.p90 > e.p90 && longTerm.p90 < e.p50, `${longTerm.p90}`);
+  assert.equal(year.p50, e.p50);
+});
+
 test('monthly URL asks for whole years from 2001', () => {
   const url = M.powerMonthlyUrl(52.22971, 21.01219, 2025);
   assert.match(url, /temporal\/monthly\/point\?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DIFF,T2M/);
