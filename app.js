@@ -25,6 +25,8 @@ const LANG_STORAGE        = 'solarSite.lang';
 const HISTORY_STORAGE     = 'solarSite.history';
 const LAST_SESSION_STORAGE = SiteSession.LAST_SESSION_KEY;  // session.js decides what Clear forgets
 const SYSTEM_LOSS_STORAGE = 'solarSite.systemLossPct';
+const MODULE_EFF_STORAGE  = 'solarSite.moduleEfficiencyPct';
+const USABLE_SHARE_STORAGE = 'solarSite.usableSharePct';
 const CRS_STORAGE         = 'solarSite.crs';
 const ECONOMICS_STORAGE   = 'solarSite.economics';
 const HISTORY_LIMIT      = 15;
@@ -47,6 +49,14 @@ const I18N = {
     'cfg.model': 'AI MODEL (WITH YOUR KEY)',
     'cfg.systemLoss': 'SYSTEM LOSSES (%)',
     'cfg.systemLossNote': 'Wiring, inverter, soiling and mismatch. Typical installations: 8–20%. 14% is the PVGIS default.',
+    'cfg.moduleEff': 'MODULE EFFICIENCY (%)',
+    'cfg.usableShare': 'USABLE SHARE OF THE SITE (%)',
+    'cfg.capacityNote': 'For the site\'s capacity. Current crystalline modules: about 20–23%. Lower the usable share for roads, setbacks and inverter stations; 100% counts the whole surveyed area.',
+    'stat.capacity': 'Site capacity (DC) · energy per year (P50 / P90)',
+    'stat.capacityTitle': '{area} ha × {share}% usable × ground coverage {gcr} (rows spaced for no shading at winter-solstice noon, {tilt}° tilt) × {eff}% module efficiency = {kwp} kWp, {haPerMWp} ha per MWp. Energy: {p50} / {p90} kWh per kWp a year (P50 / 1-year P90). DC at standard test conditions; the hull of the survey points stands in for the parcel.',
+    'stat.capacityPolar': 'No row layout: the winter sun stays too low here.',
+    'econ.site': 'Whole site, {mwp} MWp',
+    'econ.investment': 'Investment',
     'model.opus': 'Opus 5 — highest quality, slower',
     'model.sonnet': 'Sonnet 5 — balanced (recommended)',
     'model.haiku': 'Haiku 4.5 — fastest, cheapest',
@@ -224,6 +234,14 @@ const I18N = {
     'cfg.model': 'MODEL AI (Z WŁASNYM KLUCZEM)',
     'cfg.systemLoss': 'STRATY SYSTEMU (%)',
     'cfg.systemLossNote': 'Okablowanie, falownik, zabrudzenie i niedopasowanie modułów. Typowo 8–20%. 14% to wartość domyślna PVGIS.',
+    'cfg.moduleEff': 'SPRAWNOŚĆ MODUŁÓW (%)',
+    'cfg.usableShare': 'UŻYTECZNA CZĘŚĆ TERENU (%)',
+    'cfg.capacityNote': 'Do mocy całego terenu. Obecne moduły krystaliczne: około 20–23%. Zmniejsz użyteczną część o drogi, odległości od granic i stacje falowników; 100% to cały teren pomiaru.',
+    'stat.capacity': 'Moc terenu (DC) · energia rocznie (P50 / P90)',
+    'stat.capacityTitle': '{area} ha × {share}% użytecznej części × pokrycie terenu {gcr} (rzędy bez zacienienia w południe przesilenia zimowego, nachylenie {tilt}°) × sprawność modułów {eff}% = {kwp} kWp, {haPerMWp} ha na MWp. Energia: {p50} / {p90} kWh na kWp rocznie (P50 / P90 dla 1 roku). Moc DC w warunkach STC; obrys punktów pomiaru zastępuje granice działki.',
+    'stat.capacityPolar': 'Brak układu rzędów: zimowe słońce jest tu za nisko.',
+    'econ.site': 'Cały teren, {mwp} MWp',
+    'econ.investment': 'Inwestycja',
     'model.opus': 'Opus 5 — najwyższa jakość, wolniejszy',
     'model.sonnet': 'Sonnet 5 — zbalansowany (zalecany)',
     'model.haiku': 'Haiku 4.5 — najszybszy, najtańszy',
@@ -512,6 +530,30 @@ function currentSystemLoss() {
     if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
   });
 })();
+
+// ─── Capacity settings (issue #45; remembered in this browser) ───
+
+function currentModuleEfficiency() {
+  return SiteCapacity.moduleEfficiencyFraction(document.getElementById('module-efficiency').value);
+}
+function currentUsableShare() {
+  return SiteCapacity.usableShareFraction(document.getElementById('usable-share').value);
+}
+
+[['module-efficiency', MODULE_EFF_STORAGE, SiteCapacity.moduleEfficiencyFraction],
+ ['usable-share', USABLE_SHARE_STORAGE, SiteCapacity.usableShareFraction]].forEach(([id, key, toFraction]) => {
+  const input = document.getElementById(id);
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved != null) input.value = Math.round(toFraction(saved) * 1000) / 10;
+  } catch { /* ignore */ }
+  input.addEventListener('change', () => {
+    const pct = Math.round(toFraction(input.value) * 1000) / 10;
+    input.value = pct; // show the value actually used (clamped, or the default)
+    try { localStorage.setItem(key, String(pct)); } catch { /* ignore */ }
+    if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
+  });
+});
 
 // ─── Coordinate system of uploaded files (remembered in this browser) ───
 // '' = lat/lon; otherwise a crs.js id such as 'utm:34N', 'pl2000:7' or 'pttm06'.
@@ -865,12 +907,30 @@ function computeSiteStats(data) {
     area = Math.round(dLat * dLon);
   }
 
-  const layout = estimateRowLayout(centerLat, optTilt);
+  // Rows, capacity, yield and P50/P90 all describe one array: the surveyed tilt, or the
+  // optimal one where the file has no slope (issue #45; rows used the optimal tilt before).
+  const arrayTilt = avgSlope ?? optTilt;
+  const layout = estimateRowLayout(centerLat, arrayTilt);
   let rows = null;
   if (layout.spacing) {
     const lats = data.map(p => p.lat);
     const depthM = (Math.max(...lats) - Math.min(...lats)) * 111000;
     rows = Math.max(1, Math.floor(depthM / layout.spacing) + 1);
+  }
+
+  // Capacity of the whole site (issue #45): area × usable share × GCR × module efficiency.
+  let capacity = null;
+  const gcr = SiteCapacity.groundCoverageRatio(centerLat, Math.min(Math.max(arrayTilt, 0), 90));
+  if (gcr && area > 0) {
+    const moduleEfficiency = currentModuleEfficiency(), usableShare = currentUsableShare();
+    const c = SiteCapacity.siteCapacity({ areaM2: area, gcr, moduleEfficiency, usableShare });
+    const p50PerKwp = variability ? variability.p50 : yieldEst;
+    capacity = {
+      kWp: c.kWp, haPerMWp: c.haPerMWp, gcr, tilt: arrayTilt, moduleEfficiency, usableShare,
+      p50PerKwp, p90PerKwp: variability ? variability.p90Year : null,
+      mwhP50: c.kWp * p50PerKwp / 1000,
+      mwhP90: variability ? c.kWp * variability.p90Year / 1000 : null,
+    };
   }
 
   const benchmarkPct = Math.round((yieldEst - optimalYield) / optimalYield * 100);
@@ -881,7 +941,7 @@ function computeSiteStats(data) {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
     systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, climPeriod, variability, horizon, horizonLossPct,
-    facing, facingAz, hull, area,
+    facing, facingAz, hull, area, capacity,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
   stats.economics = economicsFor(stats);
@@ -1328,6 +1388,21 @@ function renderStats(data, stats) {
     ? `Row spacing ~${stats.spacing.toFixed(1)} m (avoids self-shading near winter-solstice noon; assumes ${PANEL_ROW_HEIGHT_M} m panel height) — rough estimate`
     : '';
 
+  const cap = stats.capacity;
+  const fmt1 = (v) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  const mwp = (kWp) => (kWp >= 10000 ? (kWp / 1000).toFixed(1) : (kWp / 1000).toFixed(2));
+  document.getElementById('stat-capacity').textContent = cap
+    ? `${mwp(cap.kWp)} MWp · ${Math.round(cap.mwhP50).toLocaleString()}` +
+      (cap.mwhP90 != null ? ` / ${Math.round(cap.mwhP90).toLocaleString()}` : '') + ' MWh'
+    : '—';
+  document.getElementById('stat-capacity-card').title = cap
+    ? t('stat.capacityTitle', {
+      area: fmt1(stats.area / 10000), share: Math.round(cap.usableShare * 100), gcr: cap.gcr.toFixed(2),
+      tilt: cap.tilt.toFixed(0), eff: fmt1(cap.moduleEfficiency * 100), kwp: Math.round(cap.kWp).toLocaleString(),
+      haPerMWp: cap.haPerMWp.toFixed(2), p50: cap.p50PerKwp.toLocaleString(), p90: cap.p90PerKwp != null ? cap.p90PerKwp.toLocaleString() : '—',
+    })
+    : (stats.area > 0 ? t('stat.capacityPolar') : '');
+
   const benchEl = document.getElementById('stat-benchmark');
   benchEl.textContent = (stats.benchmarkPct > 0 ? '+' : '') + stats.benchmarkPct + '%';
   // 0% means the surveyed orientation is already optimal for this climate.
@@ -1344,13 +1419,14 @@ function renderStats(data, stats) {
     (retrieved ? ' · ' + t('source.retrieved', { date: retrieved }) : '');
   document.getElementById('point-count').textContent  = t('header.pointsLoaded', { n: data.length });
 
-  renderEconomics(stats.economics);
+  renderEconomics(stats.economics, stats.capacity);
   renderCharts(stats);
 }
 
-// Per-kWp economics as a small table, P50 next to P90. Only numbers and the
-// sanitised 3-letter currency code are interpolated.
-function renderEconomics(econ) {
+// Per-kWp economics as a small table, P50 next to P90, and the whole site's totals
+// (per kWp × the site's kWp, issue #45). Only numbers and the sanitised 3-letter
+// currency code are interpolated.
+function renderEconomics(econ, capacity = null) {
   const el = document.getElementById('econ-results');
   if (!econ) {
     el.innerHTML = `<div class="key-note">${t('econ.missing')}</div>`;
@@ -1370,6 +1446,13 @@ function renderEconomics(econ) {
     row(t('econ.payback'), c => c.payback == null ? t('econ.never') : t('econ.years', { n: c.payback.toFixed(1) })) +
     row(t('econ.npv', { rate: +(econ.inputs.rate * 100).toFixed(2) }), c => money(c.npv)) +
     row(t('econ.irr'), c => c.irr == null ? '—' : (c.irr * 100).toFixed(1) + '%') +
+    (capacity
+      ? `<tr><th colspan="${cols.length + 1}">${t('econ.site', { mwp: (capacity.kWp / 1000).toFixed(2) })}</th></tr>` +
+        row(t('econ.investment'), () => money(econ.inputs.capex * capacity.kWp)) +
+        row(t('econ.yield'), c => Math.round(c.yieldKwh * capacity.kWp / 1000).toLocaleString(locale) + ' MWh') +
+        row(t('econ.revenue'), c => money(c.firstYearRevenue * capacity.kWp)) +
+        row(t('econ.npv', { rate: +(econ.inputs.rate * 100).toFixed(2) }), c => money(c.npv * capacity.kWp))
+      : '') +
     `</tbody></table>` +
     `<div class="key-note">${t('econ.resultNote', { years: econ.inputs.lifetime, deg: +(econ.inputs.degradation * 100).toFixed(2) })}</div>`;
 }
@@ -1473,7 +1556,15 @@ function buildInitialPrompt(stats) {
         `highest ${Math.max(...stats.horizon).toFixed(1)}°, mean ${(stats.horizon.reduce((s, v) => s + v, 0) / stats.horizon.length).toFixed(1)}°, ` +
         `yield ${stats.horizonLossPct.toFixed(1)}% vs an open horizon.\n`
       : `HORIZON: open horizon assumed (terrain shading not computed).\n`) +
-    `SUGGESTED ROW COUNT (site tool estimate): ${stats.rows ?? 'N/A'}\n\n` +
+    `SUGGESTED ROW COUNT (site tool estimate): ${stats.rows ?? 'N/A'}\n` +
+    (stats.capacity
+      ? `SITE CAPACITY (DC, gross estimate): ${(stats.capacity.kWp / 1000).toFixed(2)} MWp from ${(stats.area / 10000).toFixed(2)} ha × ` +
+        `${Math.round(stats.capacity.usableShare * 100)}% usable × ground coverage ratio ${stats.capacity.gcr.toFixed(2)} (rows spaced for no ` +
+        `shading at winter-solstice noon) × ${(stats.capacity.moduleEfficiency * 100).toFixed(1)}% module efficiency; ` +
+        `${stats.capacity.haPerMWp.toFixed(2)} ha/MWp; ${Math.round(stats.capacity.mwhP50)} MWh/yr at P50` +
+        (stats.capacity.mwhP90 != null ? `, ${Math.round(stats.capacity.mwhP90)} at the 1-year P90` : '') +
+        `. The site area is the convex hull of the survey points, not the parcel boundary.\n\n`
+      : `SITE CAPACITY: not estimated.\n\n`) +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');
 }
@@ -1762,7 +1853,8 @@ document.getElementById('export-pdf-btn').addEventListener('click', () => {
   if (!currentData.length) return;
   const stats = computeSiteStats(currentData);
   document.getElementById('print-meta').textContent =
-    `${new Date().toLocaleString()} · ${currentData.length} pts · ${stats.optTilt.toFixed(0)}° tilt, facing ${stats.facing === 'S' ? 'South' : 'North'} · ${stats.yieldEst.toLocaleString()} kWh/kWp/yr · ${stats.systemLossPct}% system losses`;
+    `${new Date().toLocaleString()} · ${currentData.length} pts · ${stats.optTilt.toFixed(0)}° tilt, facing ${stats.facing === 'S' ? 'South' : 'North'} · ${stats.yieldEst.toLocaleString()} kWh/kWp/yr · ${stats.systemLossPct}% system losses` +
+    (stats.capacity ? ` · ${(stats.capacity.kWp / 1000).toFixed(2)} MWp DC, ${Math.round(stats.capacity.mwhP50).toLocaleString()} MWh/yr (P50)` : '');
   document.getElementById('print-monthly').innerHTML = SiteExport.monthlyYieldTableHTML(
     stats.seasonal,
     t('print.months').split(','),

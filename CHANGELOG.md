@@ -66,6 +66,13 @@ All notable changes to this project are documented here. The format follows
   weather-only), the tooltip the weather-only and 10-year P90 (989), and the economics
   use the 10-year P90 instead of a bad year every year. AI prompt and README explain
   which is which and what is still left out (#43).
+- **Capacity of the whole site:** kWp = area × usable share × ground coverage ratio ×
+  module efficiency, with the GCR from the existing no-shading-at-winter-noon row
+  spacing, 1 / (cos β + sin β / tan α), so the row height cancels out (`capacity.js`).
+  A card shows MWp (DC) and MWh a year at P50 / 1-year P90, the economics table the
+  site's investment, energy, revenue and NPV, and GeoJSON, PDF and AI prompt include
+  it. Module efficiency (default 21%) and usable share (default 100%, gross) are
+  settings. Rows and capacity now use the same tilt as the yield (#45).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said
