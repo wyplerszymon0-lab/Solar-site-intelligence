@@ -112,6 +112,15 @@
           Wiring, inverter, soiling and mismatch. Typical installations: 8–20%. 14% is the PVGIS default.
         </div>
       </div>
+      <div class="input-group">
+        <label class="input-label" for="module-efficiency" data-i18n="cfg.moduleEff">MODULE EFFICIENCY (%)</label>
+        <input type="number" id="module-efficiency" min="5" max="30" step="0.1" value="21" inputmode="decimal">
+        <label class="input-label" for="usable-share" data-i18n="cfg.usableShare">USABLE SHARE OF THE SITE (%)</label>
+        <input type="number" id="usable-share" min="10" max="100" step="1" value="100" inputmode="decimal">
+        <div class="key-note" data-i18n="cfg.capacityNote">
+          For the site's capacity. Current crystalline modules: about 20–23%. Lower the usable share for roads, setbacks and inverter stations; 100% counts the whole surveyed area.
+        </div>
+      </div>
     </div>
 
     <!-- DATA INPUT -->
@@ -238,6 +247,10 @@
         <div class="stat-card stat-card-wide">
           <div class="stat-value" id="stat-benchmark">—</div>
           <div class="stat-label" data-i18n="stat.benchmark">Yield vs optimal orientation at this site</div>
+        </div>
+        <div class="stat-card stat-card-wide" id="stat-capacity-card" title="">
+          <div class="stat-value" id="stat-capacity">—</div>
+          <div class="stat-label" data-i18n="stat.capacity">Site capacity (DC) · energy per year (P50 / P90)</div>
         </div>
         <div class="stat-card stat-card-wide" id="stat-p90-card" title="">
           <div class="stat-value" id="stat-p90">—</div>
@@ -378,6 +391,7 @@
 
 <script src="solar-model.js"></script>
 <script src="economics.js"></script>
+<script src="capacity.js"></script>
 <script src="crs.js"></script>
 <script src="csv.js"></script>
 <script src="geometry.js"></script>

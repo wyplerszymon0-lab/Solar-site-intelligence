@@ -38,6 +38,10 @@ test('site boundary carries annual and monthly yield with its source', () => {
     yield_data_retrieved: '2026-10-03',
     yield_data_years: '2001-2025',
     system_loss_pct: 14,
+    capacity_kwp: null,
+    ground_coverage_ratio: null,
+    energy_mwh_per_year_p50: null,
+    energy_mwh_per_year_p90: null,
   });
   assert.equal(boundary.properties.yield_monthly_kwh_per_kwp.length, 12);
 });
@@ -102,6 +106,15 @@ test('retrieval date is exported only for satellite data', () => {
   assert.equal(heuristic.features.at(-1).properties.yield_data_retrieved, null);
   const legacy = buildGeoJSON(data, stats({ climFetchedAt: null })); // cached before timestamps
   assert.equal(legacy.features.at(-1).properties.yield_data_retrieved, null);
+});
+
+test("the whole site's capacity and energy are exported, rounded", () => {
+  const capacity = { kWp: 66543.2, gcr: 0.30812, mwhP50: 69402.6, mwhP90: 64211.4 };
+  const p = buildGeoJSON(data, stats({ capacity })).features.at(-1).properties;
+  assert.deepEqual([p.capacity_kwp, p.ground_coverage_ratio, p.energy_mwh_per_year_p50, p.energy_mwh_per_year_p90],
+    [66543, 0.308, 69403, 64211]);
+  const noP90 = buildGeoJSON(data, stats({ capacity: { ...capacity, mwhP90: null } })).features.at(-1).properties;
+  assert.equal(noP90.energy_mwh_per_year_p90, null);
 });
 
 test('the years behind the yield are exported only for satellite data', () => {

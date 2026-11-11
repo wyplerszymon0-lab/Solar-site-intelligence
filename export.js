@@ -44,6 +44,11 @@
           yield_data_years: stats.yieldSource === 'satellite' && stats.climPeriod
             ? `${stats.climPeriod.first}-${stats.climPeriod.last}` : null,
           system_loss_pct: stats.systemLossPct,
+          // Whole-site DC capacity and energy (issue #45); null where no row layout fits.
+          capacity_kwp: stats.capacity ? Math.round(stats.capacity.kWp) : null,
+          ground_coverage_ratio: stats.capacity ? Math.round(stats.capacity.gcr * 1000) / 1000 : null,
+          energy_mwh_per_year_p50: stats.capacity ? Math.round(stats.capacity.mwhP50) : null,
+          energy_mwh_per_year_p90: stats.capacity && stats.capacity.mwhP90 != null ? Math.round(stats.capacity.mwhP90) : null,
         },
       });
     }

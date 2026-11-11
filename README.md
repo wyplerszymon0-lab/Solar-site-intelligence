@@ -25,6 +25,7 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 - **Climate-specific optimal tilt** — the equator-facing tilt that maximises annual yield for this site's climate, found numerically instead of a latitude rule of thumb
 - **Orientation check** — how much yield the surveyed orientation loses versus the optimum at the same site
 - **Row-spacing / panel-count estimate** — suggested row spacing and how many rows fit the site, sized to avoid self-shading near the winter solstice
+- **Capacity of the whole site** — MWp (DC), MWh a year at P50 and P90, land per MWp and the whole site's investment, revenue and NPV, from the area, the row layout's ground coverage ratio and your module efficiency (see [Site capacity](#site-capacity-issue-45))
 - **Shading-risk & outlier flags** — heuristic per-point flags for a taller nearby neighbor on the sun side, or a statistically anomalous elevation reading
 - **Site charts** — rating distribution, elevation profile, per-point slope, azimuth compass rose, and monthly yield, all inline SVG
 
@@ -273,6 +274,29 @@ Each is shown for the **P50** and the **10-year P90** yield (see above): the ave
 Defaults only where a typical value is defensible: degradation **0.5 % a year** (the median of field measurements in Jordan & Kurtz, "Photovoltaic Degradation Rates — an Analytical Review", NREL 2013) and a **25-year** lifetime (the usual module performance warranty). O&M defaults to 0. Investment, energy value and discount rate have no default.
 
 Left out: taxes and depreciation, subsidies, loans and their terms, inflation beyond the real rate, inverter replacement, decommissioning, and any change in the value of energy over time.
+
+## Site capacity (issue #45)
+
+Everything above is per kWp. The capacity card turns it into the whole site:
+
+**kWp = area × usable share × GCR × module efficiency × 1 kW/m²**
+
+- **Area**: the convex hull of the survey points, the same as the "Site Area" card.
+- **Usable share** (Configuration, default 100%): what is left for rows after roads, setbacks and inverter stations. At 100% the result is gross.
+- **GCR**, the ground coverage ratio (module area over ground area), follows from the row spacing the app already suggests. Rows are spaced so that one does not shade the next at winter-solstice noon: a row of slant height *h* at tilt β needs a pitch of *h* (cos β + sin β / tan α), with α the sun's elevation then, 90° − (|latitude| + 23.45°). So GCR = 1 / (cos β + sin β / tan α), and the row height cancels out ([`capacity.js`](capacity.js)).
+- **Module efficiency** (Configuration, default 21%): the watts per m² of module at standard test conditions. Current crystalline-silicon modules are at about 20–23%.
+
+The tilt β is the same one the yield and the P50/P90 use: the surveyed slope, or the optimal tilt where the file has none. The row count uses it too; before this change it used the optimal tilt. Energy is kWp × the per-kWp P50 and 1-year P90. The economics table adds the site's investment, energy, first-year revenue and NPV: the per-kWp results × kWp.
+
+| Example | Tilt | α at winter noon | GCR | Land per MWp (21%, gross) |
+|---|---:|---:|---:|---:|
+| Warsaw, optimal tilt | 39° | 14.3° | 0.31 | 1.54 ha |
+| Lisbon, 35° | 35° | 27.8° | 0.52 | 0.91 ha |
+| Lisbon demo, surveyed 11.9° | 11.9° | 27.8° | 0.73 | 0.65 ha |
+
+The demo's 0.12 ha hold 177 kWp, 266 MWh a year at P50.
+
+**Limits.** The survey points' hull stands in for the parcel, which is usually larger. Shading between rows is avoided only at winter noon: mornings and evenings in winter, at a dense layout, lose some yield that is not modelled. The `slope` column is read as the panel tilt, so a sloping field is treated as panels at that slope. The capacity is DC: no inverter sizing, AC limit or grid connection. Fixed-tilt only; no trackers.
 
 ## A note on the heuristic estimates
 
