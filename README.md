@@ -32,7 +32,7 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 **AI analysis**
 - **AI site report** — Claude analyzes your data and returns a structured report (panel configuration, risk factors, recommendations). **No API key needed:** without one, the report comes from a small backend on Google Cloud Run (Claude Haiku 5.5, limited per day); see [AI backend](#ai-backend-google-cloud-run)
 - **Follow-up chat** — ask follow-up questions about the report in the same conversation
-- **Model picker** — with your own key, choose Opus 5, Sonnet 5, or Haiku 4.5 depending on quality/speed/cost needs
+- **Model picker** — with your own key, choose Claude Opus 5.5, Sonnet 5.5 or Haiku 5.5 depending on quality/speed/cost needs ($4 / $2 / $0.10 per million input tokens, $20 / $10 / $0.50 per million output tokens)
 
 **Data in & out**
 - **Saved analyses** — name and save analyses locally (`localStorage`) and reload them later from this browser
@@ -324,7 +324,7 @@ browser (GitHub Pages) ──POST /report──▶ Cloud Run "solar-ai" (Node, e
 - **Vanilla HTML/CSS/JS** — zero build step
 - **Leaflet.js** + **Leaflet.markercluster** + **Leaflet.heat** — map rendering, clustering, heatmap view
 - **NASA POWER API** — satellite irradiance and temperature climatology (no key needed)
-- **Claude API** (Opus 5 / Sonnet 5 / Haiku 4.5 with your key; Haiku 5.5 through the backend) — AI site analysis and follow-up chat
+- **Claude API** (Opus 5.5 / Sonnet 5.5 / Haiku 5.5 with your key, [`claude-request.js`](claude-request.js); Haiku 5.5 through the backend) — AI site analysis and follow-up chat
 - **Google Cloud Run + Firestore + Anthropic workload identity federation** — the keyless AI backend in `server/` (Node, `@anthropic-ai/sdk`)
 - **`node --test`** — tests for the yield model (including the PVGIS validation above), the CSV parser, the site geometry and the GeoJSON/print exports; run `node --test` from the repo root
 - **GitHub Pages** — hosting

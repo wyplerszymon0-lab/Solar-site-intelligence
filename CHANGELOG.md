@@ -73,6 +73,13 @@ All notable changes to this project are documented here. The format follows
   site's investment, energy, revenue and NPV, and GeoJSON, PDF and AI prompt include
   it. Module efficiency (default 21%) and usable share (default 100%, gross) are
   settings. Rows and capacity now use the same tilt as the yield (#45).
+- **AI models with your own key: Claude Opus 5.5, Sonnet 5.5 (default) and Haiku 5.5**
+  instead of Opus 5, Sonnet 5 and Haiku 4.5: Opus 5.5 is cheaper ($4 / $20 vs $5 / $25
+  per million tokens) and Haiku 5.5 ten times cheaper than Haiku 4.5 ($0.10 / $0.50).
+  The request sends no thinking, sampling or prefill fields (the new models reject
+  them) and replays only text, so follow-up questions pass the history-editing check;
+  the refusal fallback now covers Opus 5.5 and Sonnet 5.5. Model list and request body
+  moved to `claude-request.js`, with tests (#47).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said

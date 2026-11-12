@@ -57,9 +57,9 @@ const I18N = {
     'stat.capacityPolar': 'No row layout: the winter sun stays too low here.',
     'econ.site': 'Whole site, {mwp} MWp',
     'econ.investment': 'Investment',
-    'model.opus': 'Opus 5 — highest quality, slower',
-    'model.sonnet': 'Sonnet 5 — balanced (recommended)',
-    'model.haiku': 'Haiku 4.5 — fastest, cheapest',
+    'model.opus': 'Opus 5.5 — highest quality, slower',
+    'model.sonnet': 'Sonnet 5.5 — balanced (recommended)',
+    'model.haiku': 'Haiku 5.5 — fastest, cheapest',
     'data.label': 'Data Input',
     'upload.title': 'Upload CSV File',
     'upload.subtitle': 'Drop geodetic measurement data',
@@ -242,9 +242,9 @@ const I18N = {
     'stat.capacityPolar': 'Brak układu rzędów: zimowe słońce jest tu za nisko.',
     'econ.site': 'Cały teren, {mwp} MWp',
     'econ.investment': 'Inwestycja',
-    'model.opus': 'Opus 5 — najwyższa jakość, wolniejszy',
-    'model.sonnet': 'Sonnet 5 — zbalansowany (zalecany)',
-    'model.haiku': 'Haiku 4.5 — najszybszy, najtańszy',
+    'model.opus': 'Opus 5.5 — najwyższa jakość, wolniejszy',
+    'model.sonnet': 'Sonnet 5.5 — zbalansowany (zalecany)',
+    'model.haiku': 'Haiku 5.5 — najszybszy, najtańszy',
     'data.label': 'Dane wejściowe',
     'upload.title': 'Wgraj plik CSV',
     'upload.subtitle': 'Upuść dane pomiarów geodezyjnych',
@@ -1582,29 +1582,10 @@ function economicsPromptLine(econ) {
 
 // ─── Analyze (streaming + prompt caching + follow-up chat) ─
 
-// With the visitor's own key: straight from the browser to the Claude API.
+// With the visitor's own key: straight from the browser to the Claude API
+// (models and request body in claude-request.js, issue #47).
 function directRequest(apiKey, model) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-api-key': apiKey,
-    'anthropic-version': '2023-06-01',
-    'anthropic-dangerous-direct-browser-access': 'true',
-  };
-  const body = {
-    model,
-    // Opus 5 and Sonnet 5 think before answering by default, and thinking tokens
-    // count against max_tokens: the old 1000 could leave no room for the report.
-    max_tokens: 16000,
-    stream: true,
-    system: systemPrompt(),
-    messages: conversation,
-  };
-  if (model === 'claude-opus-5') {
-    // If Opus 5's safety classifiers decline, re-run on Anthropic's recommended model.
-    headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
-    body.fallbacks = 'default';
-  }
-  return { url: 'https://api.anthropic.com/v1/messages', headers, body };
+  return ClaudeRequest.directRequest(apiKey, model, systemPrompt(), conversation);
 }
 
 // Without a key: the demo proxy picks the model and writes the system prompt itself,
