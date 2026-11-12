@@ -7,7 +7,8 @@
 // day of each month's recommended average date, which handles any tilt,
 // azimuth and hemisphere with one formula, with the beam spread over the day by the
 // Collares-Pereira & Rabl distribution (see beamTiltFactor). Reflection losses at the module
-// glass use the ASHRAE incidence-angle modifier. Validated against PVGIS in
+// glass use the ASHRAE incidence-angle modifier. A single-axis tracker (horizontal
+// north–south axis) is the other mounting (see trackerDayFactors). Validated against PVGIS in
 // the README. Works in the browser (window.SolarModel) and in Node (require).
 
 (function (root) {
@@ -27,9 +28,12 @@
     horizon: null,           // skyline profile (see horizonAt); null = open horizon
     skyModel: 'hay-davies',  // diffuse light: 'isotropic' or 'hay-davies' (see monthlyYield)
     beamProfile: 'collares-pereira-rabl', // beam over the day: or 'constant-clearness' (see beamTiltFactor)
+    mounting: 'fixed',       // or 'single-axis': horizontal north–south tracker; tilt and azimuth are then ignored
+    trackerLimit: null,      // largest tracker rotation from flat, degrees; null = none, as in PVGIS
   };
   const SKY_MODELS = ['isotropic', 'hay-davies'];
   const BEAM_PROFILES = ['constant-clearness', 'collares-pereira-rabl'];
+  const MOUNTINGS = ['fixed', 'single-axis'];
   const SOLAR_CONSTANT = 1.367; // kW/m² (Duffie & Beckman §1.2)
 
   function declination(n) {
@@ -103,32 +107,44 @@
   // (1979) distribution of the global irradiation H minus the Liu & Jordan (1960) one
   // of the diffuse Hd (Duffie & Beckman eqs. 2.13.1–2.13.2), floored at zero.
   // day = { H, Hd, profile } in any one unit; only their ratio matters.
+  // The moments of a day (every 0.5° of hour angle while the sun is up) with the share of
+  // the day's global and diffuse irradiation that falls in each, and the horizontal beam,
+  // up to a constant factor. Constant clearness weights every share by cos Z; the
+  // Collares-Pereira & Rabl and Liu & Jordan distributions are described at beamTiltFactor.
+  // Shared by the fixed and the tracking mounting.
+  function dayMoments(phi, d, day) {
+    const cosZAt = (omega) => Math.cos(phi) * Math.cos(d) * Math.cos(omega) + Math.sin(phi) * Math.sin(d);
+    const shaped = day && day.profile === 'collares-pereira-rabl' && day.H > day.Hd;
+    const ws = Math.acos(Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(d)))); // sunset hour angle
+    const a = 0.409 + 0.5016 * Math.sin(ws - Math.PI / 3);
+    const b = 0.6609 - 0.4767 * Math.sin(ws - Math.PI / 3);
+    const moments = [];
+    let globalNorm = 0, diffuseNorm = 0;
+    for (let w = -180; w < 180; w += 0.5) {
+      const omega = w * DEG, cosZ = cosZAt(omega);
+      if (cosZ <= 0) continue; // sun below the horizon
+      const g = shaped ? (a + b * Math.cos(omega)) * cosZ : cosZ;
+      moments.push({ omega, cosZ, g });
+      globalNorm += g; diffuseNorm += cosZ;
+    }
+    for (const m of moments) {
+      m.global = m.g / globalNorm;     // share of the day's global irradiation H
+      m.diffuse = m.cosZ / diffuseNorm; // share of the day's diffuse irradiation Hd
+      m.beam = shaped ? Math.max(0, m.global * day.H - m.diffuse * day.Hd) : m.cosZ;
+    }
+    return moments;
+  }
+
+  // Sun azimuth from south, west positive, at hour angle omega (radians).
+  const sunAzimuthFromSouth = (phi, d, omega) =>
+    Math.atan2(Math.sin(omega) * Math.cos(d), Math.sin(phi) * Math.cos(d) * Math.cos(omega) - Math.cos(phi) * Math.sin(d));
+
   function beamTiltFactor(lat, tilt, compassAz, n, b0 = 0, horizon = null, day = null) {
     const phi = lat * DEG, beta = tilt * DEG;
     const gamma = (compassAz - 180) * DEG; // surface azimuth from south, west positive
     const d = declination(n) * DEG;
-    const cosZAt = (omega) => Math.cos(phi) * Math.cos(d) * Math.cos(omega) + Math.sin(phi) * Math.sin(d);
-    const shaped = day && day.profile === 'collares-pereira-rabl' && day.H > day.Hd;
-    let a = 0, b = 0, globalNorm = 0, diffuseNorm = 0;
-    if (shaped) {
-      const ws = Math.acos(Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(d)))); // sunset hour angle
-      a = 0.409 + 0.5016 * Math.sin(ws - Math.PI / 3);
-      b = 0.6609 - 0.4767 * Math.sin(ws - Math.PI / 3);
-      // Normalised on the same grid as below, so the two distributions sum to H and Hd.
-      for (let w = -180; w < 180; w += 0.5) {
-        const cz = cosZAt(w * DEG);
-        if (cz > 0) { globalNorm += (a + b * Math.cos(w * DEG)) * cz; diffuseNorm += cz; }
-      }
-    }
     let onPlane = 0, onHorizontal = 0;
-    for (let w = -180; w < 180; w += 0.5) {
-      const omega = w * DEG;
-      const cosZ = cosZAt(omega);
-      if (cosZ <= 0) continue; // sun below the horizon
-      // Beam on the horizontal at this moment, up to a constant factor.
-      const beam = shaped
-        ? cosZ * Math.max(0, (a + b * Math.cos(omega)) * day.H / globalNorm - day.Hd / diffuseNorm)
-        : cosZ;
+    for (const { omega, cosZ, beam } of dayMoments(phi, d, day)) {
       const cosT =
         Math.sin(d) * Math.sin(phi) * Math.cos(beta) -
         Math.sin(d) * Math.cos(phi) * Math.sin(beta) * Math.cos(gamma) +
@@ -136,14 +152,53 @@
         Math.cos(d) * Math.sin(phi) * Math.sin(beta) * Math.cos(gamma) * Math.cos(omega) +
         Math.cos(d) * Math.sin(beta) * Math.sin(gamma) * Math.sin(omega);
       onHorizontal += beam;
-      if (horizon) {
-        // Sun azimuth from south, west positive, then as a compass bearing.
-        const azS = Math.atan2(Math.sin(omega) * Math.cos(d), Math.sin(phi) * Math.cos(d) * Math.cos(omega) - Math.cos(phi) * Math.sin(d));
-        if (Math.asin(Math.min(1, cosZ)) / DEG < horizonAt(horizon, azS / DEG + 180)) continue;
-      }
+      if (horizon && behindSkyline(horizon, phi, d, omega, cosZ)) continue;
       onPlane += (beam / cosZ) * Math.max(0, cosT) * (b0 > 0 ? incidenceModifier(cosT, b0) : 1);
     }
     return onHorizontal > 0 ? onPlane / onHorizontal : 0;
+  }
+
+  const behindSkyline = (horizon, phi, d, omega, cosZ) =>
+    Math.asin(Math.min(1, cosZ)) / DEG < horizonAt(horizon, sunAzimuthFromSouth(phi, d, omega) / DEG + 180);
+
+  // ─── Single-axis tracker (issue #49) ───
+  // Rows on a horizontal north–south axis turn the modules from east (morning) to west
+  // (evening). The rotation that brings the module normal closest to the sun is
+  // R = atan(sun's east component / its up component), the true-tracking angle of
+  // Lorenzo et al. and of pvlib's singleaxis(), and PVGIS's assumption ("always minimizes
+  // the angle between the normal of the module plane and the direction to the sun").
+  // `limit` caps |R| (real trackers stop at ±50–60°); null tracks freely, as PVGIS does.
+  // No backtracking and no shading between rows, as in PVGIS.
+  //
+  // Since the module's tilt changes during the day, sky and ground light are weighted
+  // moment by moment as well: the isotropic sky by (1 + cos R)/2 over the day's diffuse
+  // distribution, the ground by (1 − cos R)/2 over the global one, each after glass
+  // reflection at the effective incidence angles for that tilt. Returns
+  //   beam:   like beamTiltFactor, plane / horizontal beam (also used for circumsolar light)
+  //   sky:    the mean sky view factor, after reflection
+  //   ground: the mean ground view factor, after reflection
+  function trackerDayFactors(lat, n, b0 = 0, horizon = null, day = null, limit = null) {
+    const phi = lat * DEG, d = declination(n) * DEG;
+    const maxR = limit == null ? Math.PI / 2 : Math.min(Math.max(limit, 0), 90) * DEG;
+    let onPlane = 0, onHorizontal = 0, sky = 0, ground = 0, diffuseSum = 0, globalSum = 0;
+    for (const { omega, cosZ, beam, global, diffuse } of dayMoments(phi, d, day)) {
+      const east = -Math.cos(d) * Math.sin(omega); // sun vector, east component; cos Z is the up one
+      const R = Math.max(-maxR, Math.min(maxR, Math.atan2(east, cosZ)));
+      const cosT = east * Math.sin(R) + cosZ * Math.cos(R);
+      const tilt = Math.abs(R) / DEG;
+      const kSky = b0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), b0) : 1;
+      const kGround = b0 > 0 ? incidenceModifier(Math.cos(groundIncidenceDeg(tilt) * DEG), b0) : 1;
+      sky += diffuse * (1 + Math.cos(R)) / 2 * kSky; diffuseSum += diffuse;
+      ground += global * (1 - Math.cos(R)) / 2 * kGround; globalSum += global;
+      onHorizontal += beam;
+      if (horizon && behindSkyline(horizon, phi, d, omega, cosZ)) continue;
+      onPlane += (beam / cosZ) * Math.max(0, cosT) * (b0 > 0 ? incidenceModifier(cosT, b0) : 1);
+    }
+    return {
+      beam: onHorizontal > 0 ? onPlane / onHorizontal : 0,
+      sky: diffuseSum > 0 ? sky / diffuseSum : 1,
+      ground: globalSum > 0 ? ground / globalSum : 0,
+    };
   }
 
   // climatology: { ghi[12], diffuse[12] } in kWh/m²/day and { temp[12] } in °C.
@@ -155,22 +210,33 @@
   //    anisotropy index A = beam / extraterrestrial, comes from around the sun and is
   //    treated like beam (same beam factor, so also glass reflection and horizon);
   //    the rest is isotropic. Clear skies give a large A, overcast skies A ≈ 0.
+  //
+  // options.mounting 'single-axis' models a horizontal north–south tracker instead
+  // (trackerDayFactors); tilt and compassAz are then ignored.
   function monthlyYield(climatology, lat, tilt, compassAz, options = {}) {
     const o = { ...DEFAULTS, ...options };
     if (!SKY_MODELS.includes(o.skyModel)) throw new Error(`unknown sky model: ${o.skyModel}`);
     if (!BEAM_PROFILES.includes(o.beamProfile)) throw new Error(`unknown beam profile: ${o.beamProfile}`);
+    if (!MOUNTINGS.includes(o.mounting)) throw new Error(`unknown mounting: ${o.mounting}`);
+    const tracking = o.mounting === 'single-axis';
     const cosB = Math.cos(tilt * DEG);
     const kSky = (o.iamB0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), o.iamB0) : 1);
     const kGround = o.iamB0 > 0 ? incidenceModifier(Math.cos(groundIncidenceDeg(tilt) * DEG), o.iamB0) : 1;
     const months = MEAN_DAY.map((n, m) => {
       const H = climatology.ghi[m];
       const Hd = Math.min(climatology.diffuse[m], H);
-      const Rb = beamTiltFactor(lat, tilt, compassAz, n, o.iamB0, o.horizon, { H, Hd, profile: o.beamProfile });
+      const day = { H, Hd, profile: o.beamProfile };
+      // Beam factor and the sky and ground view factors after glass reflection.
+      const f = tracking
+        ? trackerDayFactors(lat, n, o.iamB0, o.horizon, day, o.trackerLimit)
+        : { beam: beamTiltFactor(lat, tilt, compassAz, n, o.iamB0, o.horizon, day),
+            sky: (1 + cosB) / 2 * kSky, ground: (1 - cosB) / 2 * kGround };
+      const Rb = f.beam;
       const H0 = extraterrestrialDaily(lat, n);
       const A = o.skyModel === 'hay-davies' && H0 > 0 ? Math.min(1, (H - Hd) / H0) : 0;
       const poaDaily = (H - Hd) * Rb +
-        Hd * (A * Rb + (1 - A) * (1 + cosB) / 2 * kSky) +
-        H * o.groundAlbedo * (1 - cosB) / 2 * kGround;
+        Hd * (A * Rb + (1 - A) * f.sky) +
+        H * o.groundAlbedo * f.ground;
       const cellTemp = climatology.temp[m] + o.cellTempRise;
       const tempFactor = 1 + o.tempCoeff * (cellTemp - 25);
       const poa = poaDaily * DAYS_IN_MONTH[m];
@@ -291,6 +357,11 @@
   // sites are a small sample; and using it elsewhere is an extrapolation from Europe,
   // North Africa, South Africa and Australia.
   const ESTIMATE_UNCERTAINTY = 0.038;
+  // The same for the single-axis tracker (issue #49): its RMS error against PVGIS 5.3's
+  // inclined-axis tracker at 0° slope at the same seven sites, 5.6% when measured (3.9%
+  // without Oslo). Larger than for fixed arrays, because a tracker depends most on the
+  // low-sun hours, where the model's beam is least certain. A test recomputes it.
+  const TRACKER_ESTIMATE_UNCERTAINTY = 0.056;
 
   // P90 over an N-year horizon, with the uncertainty of the estimate: the weather's
   // year-to-year σ shrinks as σ/√N when years are averaged, an error in the estimate
@@ -330,9 +401,9 @@
   const api = {
     beamTiltFactor, monthlyYield, tiltCurve, parsePowerClimatology, powerClimatologyUrl,
     powerMonthlyUrl, parsePowerMonthly, climatologyFromSeries, yearlyYields, exceedance,
-    exceedanceWithEstimate, ESTIMATE_UNCERTAINTY, FIRST_SERIES_YEAR, horizonAt, sunPath,
+    exceedanceWithEstimate, ESTIMATE_UNCERTAINTY, TRACKER_ESTIMATE_UNCERTAINTY, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
-    extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES,
+    extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES, MOUNTINGS, trackerDayFactors,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;
