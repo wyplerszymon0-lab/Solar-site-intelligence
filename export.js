@@ -49,6 +49,9 @@
           ground_coverage_ratio: stats.capacity ? Math.round(stats.capacity.gcr * 1000) / 1000 : null,
           energy_mwh_per_year_p50: stats.capacity ? Math.round(stats.capacity.mwhP50) : null,
           energy_mwh_per_year_p90: stats.capacity && stats.capacity.mwhP90 != null ? Math.round(stats.capacity.mwhP90) : null,
+          // Ideal single-axis tracker, horizontal N–S axis (issue #49); null for the heuristic.
+          tracker_yield_kwh_per_kwp: stats.yieldSource === 'satellite' && stats.tracker ? stats.tracker.yield : null,
+          tracker_gain_pct: stats.yieldSource === 'satellite' && stats.tracker ? stats.tracker.gainPct : null,
         },
       });
     }

@@ -80,6 +80,13 @@ All notable changes to this project are documented here. The format follows
   them) and replays only text, so follow-up questions pass the history-editing check;
   the refusal fallback now covers Opus 5.5 and Sonnet 5.5. Model list and request body
   moved to `claude-request.js`, with tests (#47).
+- **Single-axis tracker alternative:** the yield of an ideal tracker on a horizontal
+  north–south axis (no rotation limit, backtracking or row shading, as in PVGIS) and its
+  gain over the best fixed array, on a card, in GeoJSON and in the AI prompt (Warsaw
+  +17.8%, Lisbon +26.8%). `monthlyYield` takes `mounting: 'single-axis'` and an optional
+  `trackerLimit`; sky and ground view factors follow the rotation over the day. Against
+  PVGIS at the seven validation sites: 5.6% RMS error, gain overrated by 3.3 points on
+  average (14 with constant clearness), so the card is labelled an upper estimate (#49).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said

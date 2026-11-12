@@ -42,6 +42,8 @@ test('site boundary carries annual and monthly yield with its source', () => {
     ground_coverage_ratio: null,
     energy_mwh_per_year_p50: null,
     energy_mwh_per_year_p90: null,
+    tracker_yield_kwh_per_kwp: null,
+    tracker_gain_pct: null,
   });
   assert.equal(boundary.properties.yield_monthly_kwh_per_kwp.length, 12);
 });
@@ -115,6 +117,14 @@ test("the whole site's capacity and energy are exported, rounded", () => {
     [66543, 0.308, 69403, 64211]);
   const noP90 = buildGeoJSON(data, stats({ capacity: { ...capacity, mwhP90: null } })).features.at(-1).properties;
   assert.equal(noP90.energy_mwh_per_year_p90, null);
+});
+
+test('the tracker alternative is exported only next to satellite yield', () => {
+  const tracker = { yield: 1757, gainPct: 21.4, uncertaintyPct: 5.6 };
+  const p = buildGeoJSON(data, stats({ tracker })).features.at(-1).properties;
+  assert.deepEqual([p.tracker_yield_kwh_per_kwp, p.tracker_gain_pct], [1757, 21.4]);
+  const heuristic = buildGeoJSON(data, stats({ tracker, yieldSource: 'heuristic' })).features.at(-1).properties;
+  assert.deepEqual([heuristic.tracker_yield_kwh_per_kwp, heuristic.tracker_gain_pct], [null, null]);
 });
 
 test('the years behind the yield are exported only for satellite data', () => {

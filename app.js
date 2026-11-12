@@ -98,6 +98,8 @@ const I18N = {
     'stat.p90': 'P50 / P90, kWh/kWp per year',
     'stat.p90Years': 'P50 / P90, kWh/kWp per year ({first}–{last})',
     'stat.p90Title': 'Same model run on each year {first}–{last}. P50 is the average year. P90 is exceeded in 9 years out of 10, counting the weather (σ {cov}%) and the {est}% uncertainty of the estimate itself, measured against PVGIS. Weather alone: {weather} (empirical: {emp}). Average of 10 years: {longTerm}.',
+    'stat.tracker': 'Single-axis tracker (N–S axis), kWh/kWp per year · gain over the best fixed array',
+    'stat.trackerTitle': 'An ideal tracker on a horizontal north–south axis, turning the modules east to west to face the sun, with no rotation limit, no backtracking and no shading between rows (as in PVGIS), on flat ground. Compared with a fixed array at the optimal {tilt}° tilt: {fixed} kWh/kWp. Against PVGIS at seven sites the model is {unc}% off (RMS) and overrates the gain by about 3 points, so read it as an upper estimate. Capacity, economics and P90 above are for the fixed array.',
     'econ.label': 'Economics (your prices)',
     'econ.currency': 'CURRENCY',
     'econ.capex': 'INVESTMENT / kWp',
@@ -283,6 +285,8 @@ const I18N = {
     'stat.p90': 'P50 / P90, kWh/kWp rocznie',
     'stat.p90Years': 'P50 / P90, kWh/kWp rocznie ({first}–{last})',
     'stat.p90Title': 'Ten sam model policzony dla każdego roku {first}–{last}. P50 to przeciętny rok. P90 jest przekraczany w 9 latach na 10, licząc pogodę (σ {cov}%) i {est}% niepewności samego szacunku, zmierzonej względem PVGIS. Sama pogoda: {weather} (empirycznie: {emp}). Średnia z 10 lat: {longTerm}.',
+    'stat.tracker': 'Tracker jednoosiowy (oś N–S), kWh/kWp rocznie · zysk względem najlepszego układu stałego',
+    'stat.trackerTitle': 'Idealny tracker na poziomej osi północ–południe, obracający moduły ze wschodu na zachód za słońcem, bez limitu obrotu, bez backtrackingu i bez zacienienia między rzędami (jak w PVGIS), na płaskim terenie. Porównanie z układem stałym o optymalnym nachyleniu {tilt}°: {fixed} kWh/kWp. Względem PVGIS w siedmiu miejscach model myli się o {unc}% (RMS) i zawyża zysk o około 3 punkty, więc to szacunek górny. Moc, ekonomia i P90 powyżej dotyczą układu stałego.',
     'econ.label': 'Ekonomia (twoje ceny)',
     'econ.currency': 'WALUTA',
     'econ.capex': 'INWESTYCJA / kWp',
@@ -851,6 +855,7 @@ function computeSiteStats(data) {
   let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null, climFetchedAt = null;
   let climPeriod = null;
   let horizonLossPct = null;
+  let tracker = null;
   if (clim && typeof clim === 'object') {
     const opt = optimalTiltFor(clim, centerLat, modelOptions);
     optTilt = opt.tilt;
@@ -864,6 +869,13 @@ function computeSiteStats(data) {
       horizonLossPct = Math.round((site.annual / open - 1) * 1000) / 10;
     }
     ghiAnnual = Math.round(clim.ghi.reduce((s, v, m) => s + v * [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m], 0));
+    // Single-axis tracker on the same data and skyline (issue #49), against the best fixed array.
+    const trackerYield = SolarModel.monthlyYield(clim, centerLat, 0, facingAz, { ...modelOptions, mounting: 'single-axis' }).annual;
+    tracker = {
+      yield: Math.round(trackerYield),
+      gainPct: Math.round((trackerYield / optimalYield - 1) * 1000) / 10,
+      uncertaintyPct: Math.round(SolarModel.TRACKER_ESTIMATE_UNCERTAINTY * 1000) / 10,
+    };
     yieldSource = 'satellite';
     climFetchedAt = clim.fetchedAt ?? null; // null for entries cached before timestamps existed
     climPeriod = { ...clim.period, fromSeries };
@@ -941,7 +953,7 @@ function computeSiteStats(data) {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
     systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, climPeriod, variability, horizon, horizonLossPct,
-    facing, facingAz, hull, area, capacity,
+    facing, facingAz, hull, area, capacity, tracker,
     spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
   };
   stats.economics = economicsFor(stats);
@@ -1383,6 +1395,14 @@ function renderStats(data, stats) {
     })
     : '';
 
+  const tr = stats.tracker;
+  document.getElementById('stat-tracker').textContent = tr
+    ? `${tr.yield.toLocaleString()} · ${tr.gainPct >= 0 ? '+' : ''}${tr.gainPct.toLocaleString()}%`
+    : '—';
+  document.getElementById('stat-tracker-card').title = tr
+    ? t('stat.trackerTitle', { tilt: stats.optTilt.toFixed(0), fixed: stats.optimalYield.toLocaleString(), unc: tr.uncertaintyPct })
+    : '';
+
   const rowsCard = document.getElementById('stat-rows-card');
   rowsCard.title = stats.spacing
     ? `Row spacing ~${stats.spacing.toFixed(1)} m (avoids self-shading near winter-solstice noon; assumes ${PANEL_ROW_HEIGHT_M} m panel height) — rough estimate`
@@ -1551,6 +1571,13 @@ function buildInitialPrompt(stats) {
         `Degradation, soiling and availability uncertainty are not included.\n`
       : '') +
     (stats.economics ? economicsPromptLine(stats.economics) : '') +
+    (stats.tracker
+      ? `SINGLE-AXIS TRACKER ALTERNATIVE (horizontal north-south axis, ideal tracking with no rotation limit, no backtracking, ` +
+        `no row shading, flat ground; same data, losses and horizon): ${stats.tracker.yield} kWh/kWp/yr, ` +
+        `${stats.tracker.gainPct >= 0 ? '+' : ''}${stats.tracker.gainPct}% over the fixed array at optimal tilt. ` +
+        `Against PVGIS at seven sites: ${stats.tracker.uncertaintyPct}% RMS error, gain overrated by about 3 points on average, ` +
+        `so treat it as an upper estimate. Capacity, economics and P90 are for the fixed array only.\n`
+      : '') +
     (stats.horizon && stats.horizonLossPct != null
       ? `TERRAIN HORIZON (Copernicus DEM, 48 directions to 25 km; beam blocked below the skyline, all yields above include it): ` +
         `highest ${Math.max(...stats.horizon).toFixed(1)}°, mean ${(stats.horizon.reduce((s, v) => s + v, 0) / stats.horizon.length).toFixed(1)}°, ` +

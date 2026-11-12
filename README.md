@@ -26,6 +26,7 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 - **Orientation check** — how much yield the surveyed orientation loses versus the optimum at the same site
 - **Row-spacing / panel-count estimate** — suggested row spacing and how many rows fit the site, sized to avoid self-shading near the winter solstice
 - **Capacity of the whole site** — MWp (DC), MWh a year at P50 and P90, land per MWp and the whole site's investment, revenue and NPV, from the area, the row layout's ground coverage ratio and your module efficiency (see [Site capacity](#site-capacity-issue-45))
+- **Single-axis tracker alternative** — the yield of a tracker on a horizontal north–south axis and its gain over the best fixed array, from the same data, validated against PVGIS (see [Single-axis tracker](#single-axis-tracker-issue-49))
 - **Shading-risk & outlier flags** — heuristic per-point flags for a taller nearby neighbor on the sun side, or a statistically anomalous elevation reading
 - **Site charts** — rating distribution, elevation profile, per-point slope, azimuth compass rose, and monthly yield, all inline SVG
 
@@ -225,6 +226,30 @@ Hay–Davies also hides the circumsolar light whenever the sun is behind the sky
 
 Spreading the beam over the day (issue #41) puts less of it at low sun, so a skyline that hides the morning and evening sun costs less. The mean gap is now 1.9 points: closer at Innsbruck, Chamonix, Hallstatt and Bergen, further at Zermatt (5.0 points). Zermatt's valley runs north–south, so its mountains hide mostly the low sun, and PVGIS loses more there, probably because the clear alpine air keeps more beam at low sun than a textbook distribution fitted to lowland stations allows.
 
+### Single-axis tracker (issue #49)
+
+Most large solar farms are now built on single-axis trackers: rows on a horizontal north–south axis that turn the modules from east in the morning to west in the evening. A card shows what such a tracker would yield at the site and its gain over the fixed array at the optimal tilt (Warsaw: 1231 against 1045 kWh/kWp, +17.8%; Lisbon: 2021 against 1594, +26.8%).
+
+**The model** ([`solar-model.js`](solar-model.js), `trackerDayFactors`). At each moment of the month's representative day, the modules turn by R = atan(east component / up component of the sun's direction), the angle that brings them closest to the sun. It is the same day, beam spread and Hay–Davies sky as for fixed arrays. Because the module's tilt changes over the day, the sky view factor (1 + cos R)/2 and the ground view factor (1 − cos R)/2 are averaged moment by moment as well, weighted by the day's diffuse and global distributions, and glass reflection is taken at the actual angles. A rotation limit is an option of the model (real trackers stop at ±50–60°; ±60° costs 0.8–1.3% at the seven sites). The app uses none, like PVGIS, whose manual says its tracker "always minimizes the angle between the normal of the module plane and the direction to the sun". It does not mention rotation limits, backtracking or row shading. The app's tracker has none of them either, and it assumes flat ground.
+
+**Validation** against PVGIS 5.3 `PVcalc` with `inclined_axis=1` at 0° slope (a horizontal north–south axis), 14% losses, at the seven sites of the fixed-array validation (fixture recorded by [`tools/make-tracker-fixtures.mjs`](tools/make-tracker-fixtures.mjs)). Nothing was fitted.
+
+| Site | PVGIS tracker, kWh/kWp | The app | Error | Gain over the fixed array, PVGIS / app | Plane-of-array gain, PVGIS / app |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Lisbon | 1960 | 2021 | +3.1% | +24.1% / +26.9% | 1.225 / 1.254 |
+| Warsaw | 1222 | 1231 | +0.8% | +16.9% / +18.7% | 1.160 / 1.184 |
+| Oslo | 1095 | 1219 | +11.2% | +15.5% / +18.6% | 1.146 / 1.187 |
+| Cairo | 2260 | 2292 | +1.4% | +24.3% / +29.9% | 1.233 / 1.283 |
+| Sydney | 1891 | 1892 | +0.1% | +21.5% / +25.4% | 1.198 / 1.238 |
+| Madrid | 1966 | 2007 | +2.1% | +21.4% / +25.6% | 1.204 / 1.247 |
+| Johannesburg | 2116 | 2301 | +8.7% | +22.3% / +29.2% | 1.211 / 1.274 |
+
+<sub>Fixed array: the validation tilt of each site ([table above](#validation-against-pvgis)), equator-facing. Plane-of-array gain: in-plane irradiation of the tracker over that of the fixed array, before temperature and module losses (PVGIS `H(i)_y`; the app without glass reflection, which PVGIS reports separately).</sub>
+
+The RMS error is **5.6%** (3.9% without Oslo), against 3.8% for fixed arrays. The tooltip gives it as the tracker's uncertainty, and a test recomputes it.
+
+**The gain is overrated, by 3.3 points on average.** The overshoot is already in the plane-of-array irradiation, at every site, so it is not temperature or module efficiency. Terrain is not the cause either: PVGIS without its horizon changes by under 0.5%, except Sydney (+3.9%). A tracker gets most of its extra light in the low-sun hours, which is where the model's beam is least certain ([issue #41](#why-east-and-west-arrays-were-the-largest-errors-issue-41)). With constant clearness, the overshoot was 14 points. The Collares-Pereira & Rabl spread brings it down to 3.3, but a textbook distribution of monthly means cannot get it all. Johannesburg (+8.7%), a clear highveld site where most of the beam comes at low sun, shows it most. So the tracker card is an upper estimate. Capacity, economics and P90 stay for the fixed array, because a tracker layout has its own row spacing and costs.
+
 ### Year-to-year variability (P50 / P90)
 
 The average year is not the whole story: lenders size a solar farm's debt on **P90**, the annual yield exceeded in 9 years out of 10. The app fetches NASA POWER's month-by-month values for every year since 2001 (the CERES-based record the climatology also comes from; earlier years use another satellite product and would mix two records), runs the same yield model on each year at the surveyed orientation, and reports:
@@ -296,7 +321,7 @@ The tilt β is the same one the yield and the P50/P90 use: the surveyed slope, o
 
 The demo's 0.12 ha hold 177 kWp, 266 MWh a year at P50.
 
-**Limits.** The survey points' hull stands in for the parcel, which is usually larger. Shading between rows is avoided only at winter noon: mornings and evenings in winter, at a dense layout, lose some yield that is not modelled. The `slope` column is read as the panel tilt, so a sloping field is treated as panels at that slope. The capacity is DC: no inverter sizing, AC limit or grid connection. Fixed-tilt only; no trackers.
+**Limits.** The survey points' hull stands in for the parcel, which is usually larger. Shading between rows is avoided only at winter noon: mornings and evenings in winter, at a dense layout, lose some yield that is not modelled. The `slope` column is read as the panel tilt, so a sloping field is treated as panels at that slope. The capacity is DC: no inverter sizing, AC limit or grid connection. Fixed-tilt only: the [tracker](#single-axis-tracker-issue-49) card gives the yield per kWp, not a tracker layout.
 
 ## A note on the heuristic estimates
 
