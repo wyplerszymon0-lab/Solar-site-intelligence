@@ -1,0 +1,87 @@
+{
+ "source": "PVGIS 5.3 seriescalc 2020, horizontal, components, no horizon; DNI = Gb(i) / sin(H_sun) summed per sun-elevation bin, kWh/m²; recorded 2026-11-13",
+ "bins": [
+  0,
+  5,
+  10,
+  15,
+  20,
+  30,
+  45,
+  90
+ ],
+ "sites": [
+  {
+   "name": "lisbon",
+   "lat": 38.72,
+   "lon": -9.14,
+   "radiationDb": "PVGIS-SARAH3",
+   "dniKwh": [
+    17.596,
+    86.022,
+    101.305,
+    166.522,
+    357.534,
+    545.969,
+    689.813
+   ],
+   "horizontalBeamKwh": [
+    1.205,
+    11.865,
+    21.871,
+    51.854,
+    154.72,
+    330.646,
+    585.67
+   ]
+  },
+  {
+   "name": "warsaw",
+   "lat": 52.23,
+   "lon": 21.01,
+   "radiationDb": "PVGIS-SARAH3",
+   "dniKwh": [
+    11.736,
+    53.411,
+    104.93,
+    102.659,
+    204.877,
+    357.087,
+    284.918
+   ],
+   "horizontalBeamKwh": [
+    0.831,
+    7.049,
+    23.191,
+    30.622,
+    85.825,
+    215.923,
+    224.365
+   ]
+  },
+  {
+   "name": "johannesburg",
+   "lat": -26.2,
+   "lon": 28.04,
+   "radiationDb": "PVGIS-SARAH3",
+   "dniKwh": [
+    25.846,
+    63.321,
+    114.857,
+    120.681,
+    304.075,
+    688.553,
+    823.855
+   ],
+   "horizontalBeamKwh": [
+    1.742,
+    8.267,
+    25.493,
+    35.889,
+    129.1,
+    422.187,
+    705.434
+   ]
+  }
+ ]
+}

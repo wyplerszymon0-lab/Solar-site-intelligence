@@ -403,7 +403,7 @@
     powerMonthlyUrl, parsePowerMonthly, climatologyFromSeries, yearlyYields, exceedance,
     exceedanceWithEstimate, ESTIMATE_UNCERTAINTY, TRACKER_ESTIMATE_UNCERTAINTY, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
-    extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES, MOUNTINGS, trackerDayFactors,
+    extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES, MOUNTINGS, trackerDayFactors, dayMoments,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;

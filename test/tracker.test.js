@@ -108,3 +108,30 @@ test('the PVGIS fixture is the same fixed-array reference as the main validation
   assert.ok(Math.abs(fixed.johannesburg / 1728.49 - 1) < 0.002);
   for (const s of PVGIS) assert.equal(s.tracker.E_m.length, 12);
 });
+
+// ─── Where the overshoot comes from: beam at low sun (issue #51) ───
+
+test('the model puts about 4 times PVGIS\'s share of the year\'s DNI below 5° of sun elevation', () => {
+  // PVGIS seriescalc 2020, hourly, binned by sun elevation; the model's mean days, 2001–2025.
+  // When written, below 5°: Lisbon 4.4 vs 0.9 %, Warsaw 4.6 vs 1.0 %, Johannesburg 4.1 vs 1.2 %.
+  const F = require('./fixtures/pvgis-dni-by-elevation.json');
+  const MEAN_DAY = [17, 47, 75, 105, 135, 162, 198, 228, 258, 288, 318, 344];
+  const DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const DEG = Math.PI / 180;
+  const shares = (xs) => { const t = xs.reduce((a, b) => a + b, 0); return xs.map(v => v / t); };
+  const binOf = (e) => F.bins.findIndex((b, k) => e >= b && e < F.bins[k + 1]);
+  for (const s of F.sites) {
+    const c = seriesClim(s.name);
+    const model = new Array(F.bins.length - 1).fill(0);
+    MEAN_DAY.forEach((n, m) => {
+      const d = 23.45 * Math.sin(2 * Math.PI * (284 + n) / 365) * DEG;
+      const day = { H: c.ghi[m], Hd: c.diffuse[m], profile: M.DEFAULTS.beamProfile };
+      for (const x of M.dayMoments(s.lat * DEG, d, day)) model[binOf(Math.asin(x.cosZ) / DEG)] += x.beam / x.cosZ * DAYS[m];
+    });
+    const [ours, pvgis] = [shares(model), shares(s.dniKwh)];
+    assert.ok(ours[0] > 3 * pvgis[0], `${s.name}: ${(ours[0] * 100).toFixed(1)} vs ${(pvgis[0] * 100).toFixed(1)}%`);
+    // Above 20° the two agree to a few points: the excess is a low-sun effect.
+    const above20 = (xs) => xs.slice(F.bins.indexOf(20)).reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(above20(ours) - above20(pvgis)) < 0.06, `${s.name} above 20°`);
+  }
+});
