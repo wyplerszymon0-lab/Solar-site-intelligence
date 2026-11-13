@@ -250,6 +250,36 @@ The RMS error is **5.6%** (3.9% without Oslo), against 3.8% for fixed arrays. Th
 
 **The gain is overrated, by 3.3 points on average.** The overshoot is already in the plane-of-array irradiation, at every site, so it is not temperature or module efficiency. Terrain is not the cause either: PVGIS without its horizon changes by under 0.5%, except Sydney (+3.9%). A tracker gets most of its extra light in the low-sun hours, which is where the model's beam is least certain ([issue #41](#why-east-and-west-arrays-were-the-largest-errors-issue-41)). With constant clearness, the overshoot was 14 points. The Collares-Pereira & Rabl spread brings it down to 3.3, but a textbook distribution of monthly means cannot get it all. Johannesburg (+8.7%), a clear highveld site where most of the beam comes at low sun, shows it most. So the tracker card is an upper estimate. Capacity, economics and P90 stay for the fixed array, because a tracker layout has its own row spacing and costs.
 
+#### Beam at low sun (issue #51)
+
+PVGIS's hourly data locate the overshoot. The table gives the share of the year's direct normal irradiation (DNI, the beam on a surface facing the sun) at each sun elevation. It compares PVGIS 5.3 `seriescalc` for 2020 (horizontal, with components, DNI = Gb / sin h, fixture recorded by [`tools/make-dni-fixture.mjs`](tools/make-dni-fixture.mjs)) with the model's mean days for 2001–2025:
+
+| Sun elevation | 0–5° | 5–10° | 10–15° | 15–20° | 20–30° | 30–45° | 45–90° |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Lisbon, PVGIS / model | 0.9 / **4.4%** | 4.4 / 5.1% | 5.2 / 5.9% | 8.5 / 6.7% | 18.2 / 19.1% | 27.8 / 25.0% | 35.1 / 33.8% |
+| Warsaw | 1.0 / **4.6%** | 4.8 / 6.3% | 9.4 / 9.0% | 9.2 / 10.0% | 18.3 / 19.5% | 31.9 / 26.5% | 25.4 / 24.0% |
+| Johannesburg | 1.2 / **4.1%** | 3.0 / 4.5% | 5.4 / 5.2% | 5.6 / 5.7% | 14.2 / 13.4% | 32.2 / 30.4% | 38.5 / 36.6% |
+
+Below 5° the model has about 4 times PVGIS's share. Above 20° the two agree to within 6 points, and a test checks both. The cause is in the distributions:
+- Collares-Pereira & Rabl's global distribution minus Liu & Jordan's diffuse one leaves the DNI roughly constant down to sunrise.
+- The real DNI fades as the light crosses more air.
+
+A fixed array facing the equator gets little of that light at a steep angle. An ideal tracker faces it squarely, and that is about the 3 points.
+
+Two textbook alternatives were tried in a prototype, and nothing was fitted:
+
+| Beam over the day | Tracker vs PVGIS: mean / RMS | Fixed arrays: RMS | All 11 fixed cases: MAE | DNI at 0–5°, Lisbon |
+| :--- | ---: | ---: | ---: | ---: |
+| Collares-Pereira & Rabl (the app) | +3.9% / 5.6% | 3.79% | 2.20% | 4.4% |
+| Hottel's clear-sky beam (Duffie & Beckman §2.8; mid-latitude summer, site altitude) | +0.5% / 4.5% | 4.09% | 2.30% | 2.1% |
+| Collares-Pereira & Rabl × Hottel's attenuation | −5.7% / 6.9% | 4.40% | 2.72% | 1.1% |
+
+Neither improves everything:
+- **Hottel's clear-sky shape** fixes the tracker on average. But it gives fixed arrays slightly larger errors (Lisbon west −3.4%) and too little DNI at 5–20°.
+- **The product of the two** overcorrects.
+
+Trying further variants until one matched PVGIS would amount to fitting to it, so the model stays as it is and the tracker card says it is an upper estimate. A real fix needs the hourly data itself, not a better shape for the mean day. That is the same conclusion as for the clearer afternoons ([issue #41](#why-east-and-west-arrays-were-the-largest-errors-issue-41)).
+
 ### Year-to-year variability (P50 / P90)
 
 The average year is not the whole story: lenders size a solar farm's debt on **P90**, the annual yield exceeded in 9 years out of 10. The app fetches NASA POWER's month-by-month values for every year since 2001 (the CERES-based record the climatology also comes from; earlier years use another satellite product and would mix two records), runs the same yield model on each year at the surveyed orientation, and reports:

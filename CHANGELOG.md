@@ -87,6 +87,11 @@ All notable changes to this project are documented here. The format follows
   `trackerLimit`; sky and ground view factors follow the rotation over the day. Against
   PVGIS at the seven validation sites: 5.6% RMS error, gain overrated by 3.3 points on
   average (14 with constant clearness), so the card is labelled an upper estimate (#49).
+- **Where the tracker overshoot comes from**, with PVGIS's hourly data at Lisbon, Warsaw
+  and Johannesburg: the model puts 4.1–4.6% of the year's DNI below 5° of sun elevation,
+  PVGIS 0.9–1.2%, while above 20° they agree. Hottel's clear-sky beam shape fixed the
+  tracker (+0.5% mean) but made fixed arrays worse, so the model is unchanged; README
+  records both alternatives, a test the evidence (#51).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said
