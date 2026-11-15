@@ -52,6 +52,11 @@
           // Ideal single-axis tracker, horizontal N–S axis (issue #49); null for the heuristic.
           tracker_yield_kwh_per_kwp: stats.yieldSource === 'satellite' && stats.tracker ? stats.tracker.yield : null,
           tracker_gain_pct: stats.yieldSource === 'satellite' && stats.tracker ? stats.tracker.gainPct : null,
+          // Tracker rows with backtracking (issue #53): GCR, rotation limit (null = none), capacity, energy.
+          tracker_gcr: stats.yieldSource === 'satellite' && stats.tracker ? stats.tracker.gcr : null,
+          tracker_rotation_limit_deg: stats.yieldSource === 'satellite' && stats.tracker ? stats.tracker.limit : null,
+          tracker_capacity_kwp: stats.yieldSource === 'satellite' && stats.tracker?.capacity ? Math.round(stats.tracker.capacity.kWp) : null,
+          tracker_energy_mwh_per_year: stats.yieldSource === 'satellite' && stats.tracker?.capacity ? Math.round(stats.tracker.capacity.mwh) : null,
         },
       });
     }

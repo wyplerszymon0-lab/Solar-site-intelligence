@@ -30,6 +30,7 @@
     beamProfile: 'collares-pereira-rabl', // beam over the day: or 'constant-clearness' (see beamTiltFactor)
     mounting: 'fixed',       // or 'single-axis': horizontal north–south tracker; tilt and azimuth are then ignored
     trackerLimit: null,      // largest tracker rotation from flat, degrees; null = none, as in PVGIS
+    trackerGcr: null,        // tracker ground coverage ratio for backtracking; null = ideal tracker, no neighbours
   };
   const SKY_MODELS = ['isotropic', 'hay-davies'];
   const BEAM_PROFILES = ['constant-clearness', 'collares-pereira-rabl'];
@@ -168,7 +169,15 @@
   // Lorenzo et al. and of pvlib's singleaxis(), and PVGIS's assumption ("always minimizes
   // the angle between the normal of the module plane and the direction to the sun").
   // `limit` caps |R| (real trackers stop at ±50–60°); null tracks freely, as PVGIS does.
-  // No backtracking and no shading between rows, as in PVGIS.
+  // With `gcr` null there are no neighbouring rows, as in PVGIS: no backtracking and no
+  // row shading.
+  //
+  // Backtracking (issue #53): rows of width w at pitch w / GCR on flat ground shade each
+  // other once |cos R| < GCR, so they turn back towards flat, to the angle at which a
+  // row's shadow just reaches the next row: R − sign(R)·acos(|cos R| / GCR) (Anderson &
+  // Mikofski 2020; pvlib's singleaxis(), which this matches to 5·10⁻⁵°, see the tests).
+  // That removes beam shading between rows, at the cost of a larger incidence angle.
+  // The diffuse light the neighbouring rows block is not modelled.
   //
   // Since the module's tilt changes during the day, sky and ground light are weighted
   // moment by moment as well: the isotropic sky by (1 + cos R)/2 over the day's diffuse
@@ -177,14 +186,41 @@
   //   beam:   like beamTiltFactor, plane / horizontal beam (also used for circumsolar light)
   //   sky:    the mean sky view factor, after reflection
   //   ground: the mean ground view factor, after reflection
-  function trackerDayFactors(lat, n, b0 = 0, horizon = null, day = null, limit = null) {
+  // Rotation from flat (radians, east positive) and cos of the incidence angle for a sun
+  // vector with east component `east` and up component `up`.
+  function trackerRotation(east, up, maxR, gcr) {
+    let R = Math.atan2(east, up);
+    if (gcr) {
+      const c = Math.abs(Math.cos(R)) / gcr;
+      if (c < 1) R -= Math.sign(R) * Math.acos(c); // backtracking
+    }
+    R = Math.max(-maxR, Math.min(maxR, R));
+    return { R, cosT: east * Math.sin(R) + up * Math.cos(R) };
+  }
+  const maxRotation = (limit) => (limit == null ? Math.PI / 2 : Math.min(Math.max(limit, 0), 90) * DEG);
+
+  // The tracker's rotation (degrees from flat, east positive) and incidence angle at hour
+  // angle `hourAngle` (degrees) of day n, or null with the sun down. For tests and charts.
+  function trackerAngles(lat, n, hourAngle, { limit = null, gcr = null } = {}) {
+    const phi = lat * DEG, d = declination(n) * DEG, omega = hourAngle * DEG;
+    const up = Math.cos(phi) * Math.cos(d) * Math.cos(omega) + Math.sin(phi) * Math.sin(d);
+    if (up <= 0) return null;
+    const { R, cosT } = trackerRotation(-Math.cos(d) * Math.sin(omega), up, maxRotation(limit), validGcr(gcr));
+    return { rotation: R / DEG, incidence: Math.acos(Math.min(1, cosT)) / DEG };
+  }
+  function validGcr(gcr) {
+    if (gcr == null) return null;
+    if (!(gcr > 0 && gcr <= 1)) throw new Error('tracker GCR must be in (0, 1]');
+    return gcr;
+  }
+
+  function trackerDayFactors(lat, n, b0 = 0, horizon = null, day = null, limit = null, gcr = null) {
     const phi = lat * DEG, d = declination(n) * DEG;
-    const maxR = limit == null ? Math.PI / 2 : Math.min(Math.max(limit, 0), 90) * DEG;
+    const maxR = maxRotation(limit), g = validGcr(gcr);
     let onPlane = 0, onHorizontal = 0, sky = 0, ground = 0, diffuseSum = 0, globalSum = 0;
     for (const { omega, cosZ, beam, global, diffuse } of dayMoments(phi, d, day)) {
       const east = -Math.cos(d) * Math.sin(omega); // sun vector, east component; cos Z is the up one
-      const R = Math.max(-maxR, Math.min(maxR, Math.atan2(east, cosZ)));
-      const cosT = east * Math.sin(R) + cosZ * Math.cos(R);
+      const { R, cosT } = trackerRotation(east, cosZ, maxR, g);
       const tilt = Math.abs(R) / DEG;
       const kSky = b0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), b0) : 1;
       const kGround = b0 > 0 ? incidenceModifier(Math.cos(groundIncidenceDeg(tilt) * DEG), b0) : 1;
@@ -228,7 +264,7 @@
       const day = { H, Hd, profile: o.beamProfile };
       // Beam factor and the sky and ground view factors after glass reflection.
       const f = tracking
-        ? trackerDayFactors(lat, n, o.iamB0, o.horizon, day, o.trackerLimit)
+        ? trackerDayFactors(lat, n, o.iamB0, o.horizon, day, o.trackerLimit, o.trackerGcr)
         : { beam: beamTiltFactor(lat, tilt, compassAz, n, o.iamB0, o.horizon, day),
             sky: (1 + cosB) / 2 * kSky, ground: (1 - cosB) / 2 * kGround };
       const Rb = f.beam;
@@ -403,7 +439,7 @@
     powerMonthlyUrl, parsePowerMonthly, climatologyFromSeries, yearlyYields, exceedance,
     exceedanceWithEstimate, ESTIMATE_UNCERTAINTY, TRACKER_ESTIMATE_UNCERTAINTY, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
-    extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES, MOUNTINGS, trackerDayFactors, dayMoments,
+    extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES, MOUNTINGS, trackerDayFactors, trackerAngles, dayMoments,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;

@@ -11,7 +11,12 @@
   const DEFAULTS = {
     moduleEfficiency: 0.21, // typical of current crystalline-silicon modules (about 20–23%)
     usableShare: 1,         // share of the area that takes rows; 1 = gross, nothing deducted
+    // Single-axis tracker rows (issue #53): the middle of the 0.25–0.40 that Bolinger &
+    // Bolinger (2022, IEEE J. Photovoltaics) give as typical for US tracking plants.
+    trackerGcr: 0.33,
+    trackerLimit: null,     // degrees from flat; null = no rotation limit (PVGIS, pvlib default)
   };
+  const TRACKER_GCR_RANGE = [0.1, 0.9];
   const MIN_SUN_ELEVATION_DEG = 3; // below this there is no sensible row spacing
 
   // Sun elevation at solar noon on the winter solstice (declination ∓23.45°).
@@ -60,9 +65,24 @@
   const moduleEfficiencyFraction = (input) => percentSetting(input, DEFAULTS.moduleEfficiency, 5, 30);
   const usableShareFraction = (input) => percentSetting(input, DEFAULTS.usableShare, 10, 100);
 
+  // Tracker settings. The GCR is entered as a ratio (0.33), clamped to 0.1–0.9; the
+  // rotation limit in degrees, clamped to 0–90, and blank or unusable means none.
+  const parseNumber = (input) => (typeof input === 'number' ? input : parseFloat(String(input ?? '').replace(',', '.')));
+  function trackerGcrSetting(input) {
+    const v = parseNumber(input);
+    if (!Number.isFinite(v)) return DEFAULTS.trackerGcr;
+    return Math.min(Math.max(v, TRACKER_GCR_RANGE[0]), TRACKER_GCR_RANGE[1]);
+  }
+  function trackerLimitSetting(input) {
+    const v = parseNumber(input);
+    if (!Number.isFinite(v)) return DEFAULTS.trackerLimit;
+    return Math.min(Math.max(v, 0), 90);
+  }
+
   const api = {
     winterNoonElevation, groundCoverageRatio, siteCapacity,
-    moduleEfficiencyFraction, usableShareFraction, DEFAULTS, MIN_SUN_ELEVATION_DEG,
+    moduleEfficiencyFraction, usableShareFraction, trackerGcrSetting, trackerLimitSetting,
+    DEFAULTS, MIN_SUN_ELEVATION_DEG, TRACKER_GCR_RANGE,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SiteCapacity = api;

@@ -44,6 +44,10 @@ test('site boundary carries annual and monthly yield with its source', () => {
     energy_mwh_per_year_p90: null,
     tracker_yield_kwh_per_kwp: null,
     tracker_gain_pct: null,
+    tracker_gcr: null,
+    tracker_rotation_limit_deg: null,
+    tracker_capacity_kwp: null,
+    tracker_energy_mwh_per_year: null,
   });
   assert.equal(boundary.properties.yield_monthly_kwh_per_kwp.length, 12);
 });
@@ -125,6 +129,15 @@ test('the tracker alternative is exported only next to satellite yield', () => {
   assert.deepEqual([p.tracker_yield_kwh_per_kwp, p.tracker_gain_pct], [1757, 21.4]);
   const heuristic = buildGeoJSON(data, stats({ tracker, yieldSource: 'heuristic' })).features.at(-1).properties;
   assert.deepEqual([heuristic.tracker_yield_kwh_per_kwp, heuristic.tracker_gain_pct], [null, null]);
+});
+
+test('the tracker layout: GCR, rotation limit, capacity and energy, rounded', () => {
+  const tracker = { yield: 1140, gainPct: 9.1, gcr: 0.33, limit: 60, capacity: { kWp: 3456.7, mwh: 3940.6 } };
+  const p = buildGeoJSON(data, stats({ tracker })).features.at(-1).properties;
+  assert.deepEqual([p.tracker_gcr, p.tracker_rotation_limit_deg, p.tracker_capacity_kwp, p.tracker_energy_mwh_per_year],
+    [0.33, 60, 3457, 3941]);
+  const free = buildGeoJSON(data, stats({ tracker: { ...tracker, limit: null, capacity: undefined } })).features.at(-1).properties;
+  assert.deepEqual([free.tracker_rotation_limit_deg, free.tracker_capacity_kwp, free.tracker_energy_mwh_per_year], [null, null, null]);
 });
 
 test('the years behind the yield are exported only for satellite data', () => {

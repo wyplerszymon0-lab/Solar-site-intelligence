@@ -121,6 +121,15 @@
           For the site's capacity. Current crystalline modules: about 20–23%. Lower the usable share for roads, setbacks and inverter stations; 100% counts the whole surveyed area.
         </div>
       </div>
+      <div class="input-group">
+        <label class="input-label" for="tracker-gcr" data-i18n="cfg.trackerGcr">TRACKER GROUND COVERAGE RATIO</label>
+        <input type="number" id="tracker-gcr" min="0.1" max="0.9" step="0.01" value="0.33" inputmode="decimal">
+        <label class="input-label" for="tracker-limit" data-i18n="cfg.trackerLimit">TRACKER ROTATION LIMIT (°, BLANK = NONE)</label>
+        <input type="number" id="tracker-limit" min="0" max="90" step="1" value="" inputmode="decimal">
+        <div class="key-note" data-i18n="cfg.trackerNote">
+          For the single-axis tracker card: module width over row pitch, typically 0.25–0.40 for tracking plants (Bolinger &amp; Bolinger 2022). Denser rows backtrack more. The limit is the tracker's mechanical stop from its datasheet.
+        </div>
+      </div>
     </div>
 
     <!-- DATA INPUT -->
@@ -258,7 +267,7 @@
         </div>
         <div class="stat-card stat-card-wide" id="stat-tracker-card" title="">
           <div class="stat-value" id="stat-tracker">—</div>
-          <div class="stat-label" data-i18n="stat.tracker">Single-axis tracker (N–S axis), kWh/kWp per year · gain over the best fixed array</div>
+          <div class="stat-label" data-i18n="stat.tracker">Single-axis tracker (N–S axis, backtracking): kWh/kWp per year · gain over the best fixed array · capacity · MWh per year</div>
         </div>
       </div>
 
