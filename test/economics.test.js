@@ -57,6 +57,30 @@ test('evaluate: a lower (P90) yield costs more per kWh and pays back later', () 
   assert.ok(p90.lcoe > p50.lcoe && p90.payback > p50.payback && p90.npv < p50.npv && p90.irr < p50.irr);
 });
 
+// ─── Tracker against fixed (issue #55) ───
+
+test('break-even extra investment: at exactly that extra cost the two NPVs are equal', () => {
+  const base = { capex: 650, price: 0.08, om: 12, rate: 0.06, degradation: 0.005, lifetime: 30 };
+  const fixed = { yieldKwh: 1045 }, tracker = { altYieldKwh: 1138, extraOm: 3 };
+  const extra = E.breakEvenExtraInvestment({ ...base, ...fixed, ...tracker });
+  const npvFixed = E.evaluate({ ...base, yieldKwh: 1045 }).npv;
+  const npvTracker = E.evaluate({ ...base, capex: base.capex + extra, om: base.om + 3, yieldKwh: 1138 }).npv;
+  close(npvTracker, npvFixed, 1e-9);
+  assert.ok(extra > 0);
+});
+
+test('break-even: without degradation it is price × discounted extra energy, minus discounted extra O&M', () => {
+  const base = { capex: 1000, price: 0.1, om: 0, rate: 0.05, degradation: 0, lifetime: 20 };
+  const annuity = (1 - 1.05 ** -20) / 0.05;
+  close(E.breakEvenExtraInvestment({ ...base, yieldKwh: 1000, altYieldKwh: 1100 }), 100 * 0.1 * annuity, 1e-9);
+  close(E.breakEvenExtraInvestment({ ...base, yieldKwh: 1000, altYieldKwh: 1100, extraOm: 4 }), (10 - 4) * annuity, 1e-9);
+  // Less energy than the fixed array: worth less even at no extra cost.
+  assert.ok(E.breakEvenExtraInvestment({ ...base, yieldKwh: 1000, altYieldKwh: 990 }) < 0);
+  // The investment itself cancels out.
+  close(E.breakEvenExtraInvestment({ ...base, capex: 5, yieldKwh: 1000, altYieldKwh: 1100 }),
+    E.breakEvenExtraInvestment({ ...base, capex: 5000, yieldKwh: 1000, altYieldKwh: 1100 }), 1e-9);
+});
+
 test('amounts typed by people: spaces, decimal commas, empty', () => {
   assert.equal(E.parseAmount('3 200'), 3200);
   assert.equal(E.parseAmount('0,85'), 0.85);

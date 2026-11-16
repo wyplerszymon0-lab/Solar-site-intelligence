@@ -357,6 +357,22 @@ Defaults only where a typical value is defensible: degradation **0.5 % a year** 
 
 Left out: taxes and depreciation, subsidies, loans and their terms, inflation beyond the real rate, inverter replacement, decommissioning, and any change in the value of energy over time.
 
+### Tracker against fixed (issue #55)
+
+How much more a tracker costs than a fixed structure is not settled. The Berkeley Lab "Utility-Scale Solar" editions and the articles about them put the US premium above zero, at about zero or even below it, depending on the year and the source, and the 2024 executive summary gives no figure. So the app does not assume one. It answers the question that needs no premium:
+
+**Break-even extra investment.** NPV is linear in the investment, so a tracker has the same NPV as the fixed array when it costs
+
+Δ*C*\* = NPV<sub>tracker</sub>(*C*, *M* + Δ*M*) − NPV<sub>fixed</sub>(*C*, *M*)
+
+more per kWp. The two NPVs use the same price, rate, degradation and lifetime, each its own P50 yield, and the tracker's extra O&M Δ*M* (optional, 0 if blank). A negative value means the tracker loses even at no extra cost. A test checks that at Δ*C*\* the two NPVs are equal. Without degradation, Δ*C*\* reduces to (*p* ΔY − Δ*M*) × the annuity factor, and a second test checks that.
+
+For example, at Warsaw (fixed P50 1043, tracker 1138 kWh/kWp at GCR 0.33) the break-even is 99 per kWp with these prices, which are only an illustration: 650 per kWp, 0.08 per kWh, O&M 12 a year, 6% real, 30 years, 0.5%/yr degradation. With 3 a year of extra O&M for the tracker it is 58.
+
+**With the actual extra investment** entered, the tracker gets its own column: LCOE, payback, NPV and IRR. The whole-site rows compare each layout at its own MWp on the same land, because a tracker layout fits a different capacity (GCR 0.33 against the fixed rows' GCR). So a tracker can win per kWp and lose per site, or the reverse.
+
+**How far to trust it.** The tracker yield is uncertain by several percent in either direction (the ideal tracker overrates the gain, and backtracking overrates the loss; see [Single-axis tracker](#single-axis-tracker-issue-49)). In the example, 1% more tracker yield raises the break-even by 12 per kWp, so ±5% moves it by about ±60, against 99. Read the break-even as an order of magnitude to compare with real quotes. There is no tracker P90, because its year-to-year series is not computed.
+
 ## Site capacity (issue #45)
 
 Everything above is per kWp. The capacity card turns it into the whole site:

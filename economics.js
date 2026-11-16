@@ -74,6 +74,17 @@
     };
   }
 
+  // How much more per kWp a second layout (a tracker, issue #55) may cost before its NPV
+  // falls to the first's. NPV is linear in the investment, so it is the difference of the
+  // two NPVs at the same investment: altYieldKwh with om + extraOm against yieldKwh with om.
+  // Positive: the alternative is worth up to that much extra; negative: it loses even at
+  // no extra cost. Same price, rate, degradation and lifetime for both.
+  function breakEvenExtraInvestment({ yieldKwh, altYieldKwh, extraOm = 0, ...inputs }) {
+    const om = inputs.om ?? DEFAULTS.om;
+    return npv(inputs.rate, cashFlows({ ...inputs, om: om + extraOm, yieldKwh: altYieldKwh })) -
+      npv(inputs.rate, cashFlows({ ...inputs, om, yieldKwh }));
+  }
+
   // A number typed by the user ("1 200", "0,85") or null when empty or unusable.
   function parseAmount(input) {
     const s = String(input ?? '').replace(/\s/g, '').replace(',', '.');
@@ -82,7 +93,7 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  const api = { cashFlows, npv, irr, payback, lcoe, evaluate, parseAmount, energyByYear, DEFAULTS };
+  const api = { cashFlows, npv, irr, payback, lcoe, evaluate, breakEvenExtraInvestment, parseAmount, energyByYear, DEFAULTS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarEconomics = api;
 })(typeof window !== 'undefined' ? window : globalThis);
