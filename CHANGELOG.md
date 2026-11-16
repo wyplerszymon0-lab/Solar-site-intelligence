@@ -100,6 +100,13 @@ All notable changes to this project are documented here. The format follows
   MWh for the site; GeoJSON and AI prompt include GCR, limit, capacity and energy.
   Warsaw at GCR 0.33: 1138 kWh/kWp, +8.9% over the fixed array, −7.6% for
   backtracking, a loss the model overstates because of its low-sun beam (#51) (#53).
+- **Tracker economics without a guessed premium.** The economics table shows the
+  break-even extra investment: how much more per kWp a tracker may cost before its NPV
+  falls to the fixed array's (NPV is linear in the investment, so it is the difference of
+  the two NPVs). Optional inputs for the tracker's actual extra investment and O&M add a
+  tracker column (LCOE, payback, NPV, IRR) and the tracker layout's whole-site rows at
+  its own MWp. Berkeley Lab sources disagree on the premium's sign over the years, so
+  there is no default (#55).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said

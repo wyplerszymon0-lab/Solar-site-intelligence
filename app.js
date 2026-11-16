@@ -125,6 +125,13 @@ const I18N = {
     'econ.npv': 'NPV at {rate}%',
     'econ.irr': 'IRR (real)',
     'econ.never': 'not within lifetime',
+    'econ.trackerCapex': 'TRACKER: EXTRA INVESTMENT / kWp',
+    'econ.trackerOm': 'TRACKER: EXTRA O&M / kWp / YEAR',
+    'econ.trackerCol': 'Tracker',
+    'econ.breakEven': 'Tracker pays off against the fixed array (same NPV)',
+    'econ.breakEvenUpTo': 'if it costs at most {v} per kWp more',
+    'econ.breakEvenNever': 'never: even at no extra cost it is {v} per kWp worse',
+    'econ.trackerNote': 'Tracker: its P50 yield with backtracking from the tracker card, which is uncertain by several percent either way, and no P90. Enter its extra investment to see its LCOE, payback and NPV; the break-even needs none. Whole site: each layout at its own MWp on the same land.',
     'econ.years': '{n} yr',
     'econ.resultNote': '{years} years, {deg}% degradation a year. P90 is the 10-year P90 every year: the average yield exceeded with 90% confidence, weather and estimate uncertainty included. A cautious case, not a forecast.',
     'charts.horizon': 'Horizon and Sun Path',
@@ -317,6 +324,13 @@ const I18N = {
     'econ.npv': 'NPV przy {rate}%',
     'econ.irr': 'IRR (realna)',
     'econ.never': 'nie w okresie życia',
+    'econ.trackerCapex': 'TRACKER: DOPŁATA DO INWESTYCJI / kWp',
+    'econ.trackerOm': 'TRACKER: DOPŁATA DO EKSPLOATACJI / kWp / ROK',
+    'econ.trackerCol': 'Tracker',
+    'econ.breakEven': 'Tracker opłaca się względem układu stałego (to samo NPV)',
+    'econ.breakEvenUpTo': 'jeśli kosztuje najwyżej {v} na kWp więcej',
+    'econ.breakEvenNever': 'nigdy: nawet bez dopłaty jest o {v} na kWp gorszy',
+    'econ.trackerNote': 'Tracker: jego uzysk P50 z backtrackingiem z karty trackera, niepewny o kilka procent w obie strony, bez P90. Wpisz dopłatę do inwestycji, żeby zobaczyć jego LCOE, zwrot i NPV; próg opłacalności jej nie wymaga. Cały teren: każdy układ przy własnej mocy MWp na tym samym terenie.',
     'econ.years': '{n} lat',
     'econ.resultNote': '{years} lat, degradacja {deg}% rocznie. P90 to 10-letnie P90 co roku: średni uzysk przekraczany z 90% pewnością, z niepewnością pogody i szacunku. Wariant ostrożny, nie prognoza.',
     'charts.horizon': 'Horyzont i droga słońca',
@@ -630,7 +644,7 @@ function currentCRS() {
 
 // ─── Economics inputs (the user's own prices, remembered in this browser) ───
 
-const ECONOMICS_FIELDS = ['currency', 'capex', 'price', 'om', 'rate', 'degradation', 'lifetime'];
+const ECONOMICS_FIELDS = ['currency', 'capex', 'price', 'om', 'rate', 'degradation', 'lifetime', 'tracker-capex', 'tracker-om'];
 const econInput = (field) => document.getElementById('econ-' + field);
 
 // The inputs as numbers for economics.js, or null until investment, energy value
@@ -647,6 +661,10 @@ function currentEconomics() {
     om: Math.max(0, n('om') ?? SolarEconomics.DEFAULTS.om),
     degradation: degradationPct == null ? SolarEconomics.DEFAULTS.degradation : Math.min(5, Math.max(0, degradationPct)) / 100,
     lifetime: Math.min(50, Math.max(1, lifetime)),
+    // Tracker over the fixed array (issue #55): optional. With no extra investment the
+    // tracker's own NPV, LCOE and payback are not shown; the break-even always is.
+    trackerExtraCapex: n('tracker-capex'),
+    trackerExtraOm: Math.max(0, n('tracker-om') ?? 0),
   };
 }
 
@@ -668,10 +686,26 @@ function economicsFor(stats) {
   const inputs = currentEconomics();
   if (!inputs) return null;
   const run = (yieldKwh) => ({ yieldKwh, ...SolarEconomics.evaluate({ ...inputs, yieldKwh }) });
+  const p50Yield = stats.variability ? stats.variability.p50 : stats.yieldEst;
+  let tracker = null;
+  if (stats.tracker && stats.yieldSource === 'satellite') {
+    const yieldKwh = stats.tracker.yield;
+    const breakEven = SolarEconomics.breakEvenExtraInvestment({
+      ...inputs, yieldKwh: p50Yield, altYieldKwh: yieldKwh, extraOm: inputs.trackerExtraOm,
+    });
+    const priced = inputs.trackerExtraCapex != null;
+    tracker = {
+      yieldKwh, breakEven, priced, firstYearRevenue: yieldKwh * inputs.price,
+      ...(priced ? SolarEconomics.evaluate({
+        ...inputs, capex: inputs.capex + inputs.trackerExtraCapex, om: inputs.om + inputs.trackerExtraOm, yieldKwh,
+      }) : {}),
+    };
+  }
   return {
     inputs,
-    p50: run(stats.variability ? stats.variability.p50 : stats.yieldEst),
+    p50: run(p50Yield),
     p90: stats.variability ? run(stats.variability.p90LongTerm) : null, // issue #43: the 10-year P90
+    tracker,
   };
 }
 
@@ -1500,14 +1534,14 @@ function renderStats(data, stats) {
     (retrieved ? ' · ' + t('source.retrieved', { date: retrieved }) : '');
   document.getElementById('point-count').textContent  = t('header.pointsLoaded', { n: data.length });
 
-  renderEconomics(stats.economics, stats.capacity);
+  renderEconomics(stats.economics, stats.capacity, stats.tracker?.capacity ?? null);
   renderCharts(stats);
 }
 
 // Per-kWp economics as a small table, P50 next to P90, and the whole site's totals
 // (per kWp × the site's kWp, issue #45). Only numbers and the sanitised 3-letter
 // currency code are interpolated.
-function renderEconomics(econ, capacity = null) {
+function renderEconomics(econ, capacity = null, trackerCapacity = null) {
   const el = document.getElementById('econ-results');
   if (!econ) {
     el.innerHTML = `<div class="key-note">${t('econ.missing')}</div>`;
@@ -1517,25 +1551,41 @@ function renderEconomics(econ, capacity = null) {
   const locale = currentLang === 'pl' ? 'pl-PL' : 'en-GB';
   const money = (v, digits = 0) => v.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits }) + (cur ? ' ' + cur : '');
   const lcoeDigits = econ.p50.lcoe < 1 ? 3 : 2;
-  const cols = econ.p90 ? [econ.p50, econ.p90] : [econ.p50];
+  // Columns: fixed array at P50 (and 10-year P90), then the tracker at its P50 (issue #55),
+  // each with the capacity of its own layout for the whole-site rows.
+  const tr = econ.tracker;
+  const cols = [
+    { ...econ.p50, head: 'P50', capex: econ.inputs.capex, kWp: capacity?.kWp },
+    ...(econ.p90 ? [{ ...econ.p90, head: 'P90', capex: econ.inputs.capex, kWp: capacity?.kWp }] : []),
+    ...(tr ? [{ ...tr, head: t('econ.trackerCol'), capex: tr.priced ? econ.inputs.capex + econ.inputs.trackerExtraCapex : null, kWp: trackerCapacity?.kWp }] : []),
+  ];
+  const priced = (c) => c.npv != null; // the tracker without an extra investment has no NPV
+  const cell = (c, fn) => (priced(c) ? fn(c) : '—');
   const row = (label, fn) => `<tr><td>${label}</td>${cols.map(c => `<td>${fn(c)}</td>`).join('')}</tr>`;
+  const npvLabel = t('econ.npv', { rate: +(econ.inputs.rate * 100).toFixed(2) });
+  const site = (c, fn) => (c.kWp ? fn(c) : '—');
+  const siteMwp = [capacity, trackerCapacity].filter(Boolean).map(x => (x.kWp / 1000).toFixed(2));
   el.innerHTML =
-    `<table class="data-table"><thead><tr><th>${t('econ.perKwp')}</th><th>P50</th>${econ.p90 ? '<th>P90</th>' : ''}</tr></thead><tbody>` +
+    `<table class="data-table"><thead><tr><th>${t('econ.perKwp')}</th>${cols.map(c => `<th>${c.head}</th>`).join('')}</tr></thead><tbody>` +
     row(t('econ.yield'), c => Math.round(c.yieldKwh).toLocaleString(locale) + ' kWh') +
     row(t('econ.revenue'), c => money(c.firstYearRevenue)) +
-    row(t('econ.lcoe'), c => money(c.lcoe, lcoeDigits) + '/kWh') +
-    row(t('econ.payback'), c => c.payback == null ? t('econ.never') : t('econ.years', { n: c.payback.toFixed(1) })) +
-    row(t('econ.npv', { rate: +(econ.inputs.rate * 100).toFixed(2) }), c => money(c.npv)) +
-    row(t('econ.irr'), c => c.irr == null ? '—' : (c.irr * 100).toFixed(1) + '%') +
-    (capacity
-      ? `<tr><th colspan="${cols.length + 1}">${t('econ.site', { mwp: (capacity.kWp / 1000).toFixed(2) })}</th></tr>` +
-        row(t('econ.investment'), () => money(econ.inputs.capex * capacity.kWp)) +
-        row(t('econ.yield'), c => Math.round(c.yieldKwh * capacity.kWp / 1000).toLocaleString(locale) + ' MWh') +
-        row(t('econ.revenue'), c => money(c.firstYearRevenue * capacity.kWp)) +
-        row(t('econ.npv', { rate: +(econ.inputs.rate * 100).toFixed(2) }), c => money(c.npv * capacity.kWp))
+    row(t('econ.lcoe'), c => cell(c, c => money(c.lcoe, lcoeDigits) + '/kWh')) +
+    row(t('econ.payback'), c => cell(c, c => (c.payback == null ? t('econ.never') : t('econ.years', { n: c.payback.toFixed(1) })))) +
+    row(npvLabel, c => cell(c, c => money(c.npv))) +
+    row(t('econ.irr'), c => cell(c, c => (c.irr == null ? '—' : (c.irr * 100).toFixed(1) + '%'))) +
+    (tr
+      ? `<tr><td>${t('econ.breakEven')}</td><td colspan="${cols.length}">${t(tr.breakEven >= 0 ? 'econ.breakEvenUpTo' : 'econ.breakEvenNever', { v: money(Math.abs(tr.breakEven)) })}</td></tr>`
+      : '') +
+    (capacity || trackerCapacity
+      ? `<tr><th colspan="${cols.length + 1}">${t('econ.site', { mwp: siteMwp.join(' / ') })}</th></tr>` +
+        row(t('econ.investment'), c => site(c, c => (c.capex == null ? '—' : money(c.capex * c.kWp)))) +
+        row(t('econ.yield'), c => site(c, c => Math.round(c.yieldKwh * c.kWp / 1000).toLocaleString(locale) + ' MWh')) +
+        row(t('econ.revenue'), c => site(c, c => money(c.firstYearRevenue * c.kWp))) +
+        row(npvLabel, c => site(c, c => cell(c, c => money(c.npv * c.kWp))))
       : '') +
     `</tbody></table>` +
-    `<div class="key-note">${t('econ.resultNote', { years: econ.inputs.lifetime, deg: +(econ.inputs.degradation * 100).toFixed(2) })}</div>`;
+    `<div class="key-note">${t('econ.resultNote', { years: econ.inputs.lifetime, deg: +(econ.inputs.degradation * 100).toFixed(2) })}` +
+    (tr ? ' ' + t('econ.trackerNote') : '') + `</div>`;
 }
 
 // ─── Map view toggle (markers / heatmap) ──────────────────
@@ -1671,7 +1721,15 @@ function economicsPromptLine(econ) {
   return `ECONOMICS PER kWp (user's prices, real terms; no taxes, subsidies or financing): investment ${i.capex} ${cur}, ` +
     `energy value ${i.price} ${cur}/kWh, O&M ${i.om} ${cur}/yr, discount rate ${+(i.rate * 100).toFixed(2)}%, ` +
     `degradation ${+(i.degradation * 100).toFixed(2)}%/yr, ${i.lifetime} years. P50: ${fmt(econ.p50)}` +
-    (econ.p90 ? `. 10-year P90 yield every year: ${fmt(econ.p90)}` : '') + `.\n`;
+    (econ.p90 ? `. 10-year P90 yield every year: ${fmt(econ.p90)}` : '') + `.\n` +
+    (econ.tracker
+      ? `TRACKER ECONOMICS PER kWp (tracker P50 ${econ.tracker.yieldKwh} kWh/kWp, extra O&M ${i.trackerExtraOm} ${cur}/yr): ` +
+        (econ.tracker.breakEven >= 0
+          ? `same NPV as the fixed array if the tracker costs up to ${Math.round(econ.tracker.breakEven)} ${cur}/kWp more`
+          : `worse than the fixed array by ${Math.round(-econ.tracker.breakEven)} ${cur}/kWp in NPV even at no extra investment`) +
+        (econ.tracker.priced ? `; with the user's extra investment of ${i.trackerExtraCapex} ${cur}/kWp: ${fmt(econ.tracker)}` : '; no tracker extra investment entered') +
+        `. The tracker yield is uncertain by several percent either way, which moves this break-even.\n`
+      : '');
 }
 
 // ─── Analyze (streaming + prompt caching + follow-up chat) ─
