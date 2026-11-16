@@ -92,6 +92,14 @@ All notable changes to this project are documented here. The format follows
   PVGIS 0.9–1.2%, while above 20° they agree. Hottel's clear-sky beam shape fixed the
   tracker (+0.5% mean) but made fixed arrays worse, so the model is unchanged; README
   records both alternatives, a test the evidence (#51).
+- **Tracker rows with backtracking, and the tracker layout's capacity.** Rows at a
+  ground coverage ratio (setting, default 0.33, the middle of Bolinger & Bolinger's
+  0.25–0.40 for tracking plants) turn back towards flat at low sun so they do not shade
+  each other. The rotation matches pvlib's `singleaxis` to 5·10⁻⁵° at 1700 sun
+  positions. An optional rotation limit is a setting too. The tracker card adds MWp and
+  MWh for the site; GeoJSON and AI prompt include GCR, limit, capacity and energy.
+  Warsaw at GCR 0.33: 1138 kWh/kWp, +8.9% over the fixed array, −7.6% for
+  backtracking, a loss the model overstates because of its low-sun beam (#51) (#53).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said

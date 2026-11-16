@@ -27,6 +27,8 @@ const LAST_SESSION_STORAGE = SiteSession.LAST_SESSION_KEY;  // session.js decide
 const SYSTEM_LOSS_STORAGE = 'solarSite.systemLossPct';
 const MODULE_EFF_STORAGE  = 'solarSite.moduleEfficiencyPct';
 const USABLE_SHARE_STORAGE = 'solarSite.usableSharePct';
+const TRACKER_GCR_STORAGE = 'solarSite.trackerGcr';
+const TRACKER_LIMIT_STORAGE = 'solarSite.trackerLimitDeg';
 const CRS_STORAGE         = 'solarSite.crs';
 const ECONOMICS_STORAGE   = 'solarSite.economics';
 const HISTORY_LIMIT      = 15;
@@ -98,8 +100,13 @@ const I18N = {
     'stat.p90': 'P50 / P90, kWh/kWp per year',
     'stat.p90Years': 'P50 / P90, kWh/kWp per year ({first}–{last})',
     'stat.p90Title': 'Same model run on each year {first}–{last}. P50 is the average year. P90 is exceeded in 9 years out of 10, counting the weather (σ {cov}%) and the {est}% uncertainty of the estimate itself, measured against PVGIS. Weather alone: {weather} (empirical: {emp}). Average of 10 years: {longTerm}.',
-    'stat.tracker': 'Single-axis tracker (N–S axis), kWh/kWp per year · gain over the best fixed array',
-    'stat.trackerTitle': 'An ideal tracker on a horizontal north–south axis, turning the modules east to west to face the sun, with no rotation limit, no backtracking and no shading between rows (as in PVGIS), on flat ground. Compared with a fixed array at the optimal {tilt}° tilt: {fixed} kWh/kWp. Against PVGIS at seven sites the model is {unc}% off (RMS) and overrates the gain by about 3 points, so read it as an upper estimate. Capacity, economics and P90 above are for the fixed array.',
+    'stat.tracker': 'Single-axis tracker (N–S axis, backtracking): kWh/kWp per year · gain over the best fixed array · capacity · MWh per year',
+    'stat.trackerTitle': 'Tracker rows on a horizontal north–south axis at ground coverage {gcr}, {limit}, on flat ground. At low sun the rows turn back towards flat so they do not shade each other (backtracking): {loss}% against an ideal tracker without neighbours ({ideal} kWh/kWp). Compared with a fixed array at the optimal {tilt}° tilt: {fixed} kWh/kWp. Capacity: {area} ha × {share}% usable × {gcr} × {eff}% module efficiency = {kwp} kWp, {haPerMWp} ha per MWp. Against PVGIS (ideal tracker, seven sites) the model is {unc}% off (RMS) and overrates the gain by about 3 points, and too much beam at low sun also overstates the backtracking loss: read the yield as uncertain in both directions by several percent. Economics and P90 above are for the fixed array.',
+    'stat.trackerNoLimit': 'no rotation limit',
+    'stat.trackerLimit': 'rotation limit ±{limit}°',
+    'cfg.trackerGcr': 'TRACKER GROUND COVERAGE RATIO',
+    'cfg.trackerLimit': 'TRACKER ROTATION LIMIT (°, BLANK = NONE)',
+    'cfg.trackerNote': 'For the single-axis tracker card: module width over row pitch, typically 0.25–0.40 for tracking plants (Bolinger & Bolinger 2022). Denser rows backtrack more. The limit is the tracker\'s mechanical stop from its datasheet.',
     'econ.label': 'Economics (your prices)',
     'econ.currency': 'CURRENCY',
     'econ.capex': 'INVESTMENT / kWp',
@@ -285,8 +292,13 @@ const I18N = {
     'stat.p90': 'P50 / P90, kWh/kWp rocznie',
     'stat.p90Years': 'P50 / P90, kWh/kWp rocznie ({first}–{last})',
     'stat.p90Title': 'Ten sam model policzony dla każdego roku {first}–{last}. P50 to przeciętny rok. P90 jest przekraczany w 9 latach na 10, licząc pogodę (σ {cov}%) i {est}% niepewności samego szacunku, zmierzonej względem PVGIS. Sama pogoda: {weather} (empirycznie: {emp}). Średnia z 10 lat: {longTerm}.',
-    'stat.tracker': 'Tracker jednoosiowy (oś N–S), kWh/kWp rocznie · zysk względem najlepszego układu stałego',
-    'stat.trackerTitle': 'Idealny tracker na poziomej osi północ–południe, obracający moduły ze wschodu na zachód za słońcem, bez limitu obrotu, bez backtrackingu i bez zacienienia między rzędami (jak w PVGIS), na płaskim terenie. Porównanie z układem stałym o optymalnym nachyleniu {tilt}°: {fixed} kWh/kWp. Względem PVGIS w siedmiu miejscach model myli się o {unc}% (RMS) i zawyża zysk o około 3 punkty, więc to szacunek górny. Moc, ekonomia i P90 powyżej dotyczą układu stałego.',
+    'stat.tracker': 'Tracker jednoosiowy (oś N–S, backtracking): kWh/kWp rocznie · zysk względem najlepszego układu stałego · moc · MWh rocznie',
+    'stat.trackerTitle': 'Rzędy trackerów na poziomej osi północ–południe przy pokryciu terenu {gcr}, {limit}, na płaskim terenie. Przy niskim słońcu rzędy wracają w stronę poziomu, żeby się nie zacieniać (backtracking): {loss}% względem idealnego trackera bez sąsiadów ({ideal} kWh/kWp). Porównanie z układem stałym o optymalnym nachyleniu {tilt}°: {fixed} kWh/kWp. Moc: {area} ha × {share}% użytecznej części × {gcr} × sprawność modułów {eff}% = {kwp} kWp, {haPerMWp} ha na MWp. Względem PVGIS (idealny tracker, siedem miejsc) model myli się o {unc}% (RMS) i zawyża zysk o około 3 punkty, a za dużo promieniowania bezpośredniego przy niskim słońcu zawyża też stratę z backtrackingu: uzysk jest niepewny o kilka procent w obie strony. Ekonomia i P90 powyżej dotyczą układu stałego.',
+    'stat.trackerNoLimit': 'bez limitu obrotu',
+    'stat.trackerLimit': 'limit obrotu ±{limit}°',
+    'cfg.trackerGcr': 'POKRYCIE TERENU PRZEZ TRACKERY (GCR)',
+    'cfg.trackerLimit': 'LIMIT OBROTU TRACKERA (°, PUSTE = BRAK)',
+    'cfg.trackerNote': 'Do karty trackera jednoosiowego: szerokość modułu przez rozstaw rzędów, zwykle 0,25–0,40 w farmach z trackerami (Bolinger & Bolinger 2022). Gęstsze rzędy częściej robią backtracking. Limit to mechaniczny zakres obrotu z karty katalogowej trackera.',
     'econ.label': 'Ekonomia (twoje ceny)',
     'econ.currency': 'WALUTA',
     'econ.capex': 'INWESTYCJA / kWp',
@@ -535,6 +547,9 @@ function currentSystemLoss() {
   });
 })();
 
+// MWp with two decimals below 10 MWp, one above.
+const mwpLabel = (kWp) => (kWp >= 10000 ? (kWp / 1000).toFixed(1) : (kWp / 1000).toFixed(2));
+
 // ─── Capacity settings (issue #45; remembered in this browser) ───
 
 function currentModuleEfficiency() {
@@ -555,6 +570,29 @@ function currentUsableShare() {
     const pct = Math.round(toFraction(input.value) * 1000) / 10;
     input.value = pct; // show the value actually used (clamped, or the default)
     try { localStorage.setItem(key, String(pct)); } catch { /* ignore */ }
+    if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
+  });
+});
+
+// Tracker settings (issue #53): a ratio and an optional limit in degrees, not percents.
+function currentTrackerGcr() {
+  return SiteCapacity.trackerGcrSetting(document.getElementById('tracker-gcr').value);
+}
+function currentTrackerLimit() {
+  return SiteCapacity.trackerLimitSetting(document.getElementById('tracker-limit').value);
+}
+[['tracker-gcr', TRACKER_GCR_STORAGE, SiteCapacity.trackerGcrSetting],
+ ['tracker-limit', TRACKER_LIMIT_STORAGE, SiteCapacity.trackerLimitSetting]].forEach(([id, key, parse]) => {
+  const input = document.getElementById(id);
+  const show = (v) => (v == null ? '' : String(Math.round(v * 100) / 100));
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved != null) input.value = show(parse(saved));
+  } catch { /* ignore */ }
+  input.addEventListener('change', () => {
+    const v = parse(input.value);
+    input.value = show(v); // the value actually used (clamped, the default, or blank for none)
+    try { localStorage.setItem(key, show(v)); } catch { /* ignore */ }
     if (currentData.length) renderStats(currentData, computeSiteStats(currentData));
   });
 });
@@ -869,11 +907,18 @@ function computeSiteStats(data) {
       horizonLossPct = Math.round((site.annual / open - 1) * 1000) / 10;
     }
     ghiAnnual = Math.round(clim.ghi.reduce((s, v, m) => s + v * [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m], 0));
-    // Single-axis tracker on the same data and skyline (issue #49), against the best fixed array.
-    const trackerYield = SolarModel.monthlyYield(clim, centerLat, 0, facingAz, { ...modelOptions, mounting: 'single-axis' }).annual;
+    // Single-axis tracker on the same data and skyline (issue #49), against the best fixed
+    // array: rows at the tracker GCR with backtracking (issue #53), next to the ideal tracker.
+    const trackerGcr = currentTrackerGcr(), trackerLimit = currentTrackerLimit();
+    const trackerOptions = { ...modelOptions, mounting: 'single-axis', trackerLimit };
+    const idealYield = SolarModel.monthlyYield(clim, centerLat, 0, facingAz, trackerOptions).annual;
+    const trackerYield = SolarModel.monthlyYield(clim, centerLat, 0, facingAz, { ...trackerOptions, trackerGcr }).annual;
     tracker = {
       yield: Math.round(trackerYield),
+      idealYield: Math.round(idealYield),
+      backtrackingLossPct: Math.round((trackerYield / idealYield - 1) * 1000) / 10,
       gainPct: Math.round((trackerYield / optimalYield - 1) * 1000) / 10,
+      gcr: trackerGcr, limit: trackerLimit,
       uncertaintyPct: Math.round(SolarModel.TRACKER_ESTIMATE_UNCERTAINTY * 1000) / 10,
     };
     yieldSource = 'satellite';
@@ -943,6 +988,13 @@ function computeSiteStats(data) {
       mwhP50: c.kWp * p50PerKwp / 1000,
       mwhP90: variability ? c.kWp * variability.p90Year / 1000 : null,
     };
+  }
+
+  // The tracker layout's capacity: same area, usable share and modules, the tracker GCR.
+  if (tracker && area > 0) {
+    const moduleEfficiency = currentModuleEfficiency(), usableShare = currentUsableShare();
+    const c = SiteCapacity.siteCapacity({ areaM2: area, gcr: tracker.gcr, moduleEfficiency, usableShare });
+    tracker.capacity = { kWp: c.kWp, haPerMWp: c.haPerMWp, moduleEfficiency, usableShare, mwh: c.kWp * tracker.yield / 1000 };
   }
 
   const benchmarkPct = Math.round((yieldEst - optimalYield) / optimalYield * 100);
@@ -1396,11 +1448,21 @@ function renderStats(data, stats) {
     : '';
 
   const tr = stats.tracker;
+  const trCap = tr && tr.capacity;
   document.getElementById('stat-tracker').textContent = tr
-    ? `${tr.yield.toLocaleString()} · ${tr.gainPct >= 0 ? '+' : ''}${tr.gainPct.toLocaleString()}%`
+    ? `${tr.yield.toLocaleString()} · ${tr.gainPct >= 0 ? '+' : ''}${tr.gainPct.toLocaleString()}%` +
+      (trCap ? ` · ${mwpLabel(trCap.kWp)} MWp · ${Math.round(trCap.mwh).toLocaleString()} MWh` : '')
     : '—';
   document.getElementById('stat-tracker-card').title = tr
-    ? t('stat.trackerTitle', { tilt: stats.optTilt.toFixed(0), fixed: stats.optimalYield.toLocaleString(), unc: tr.uncertaintyPct })
+    ? t('stat.trackerTitle', {
+      gcr: tr.gcr.toFixed(2), limit: tr.limit == null ? t('stat.trackerNoLimit') : t('stat.trackerLimit', { limit: tr.limit }),
+      loss: tr.backtrackingLossPct.toLocaleString(), ideal: tr.idealYield.toLocaleString(),
+      tilt: stats.optTilt.toFixed(0), fixed: stats.optimalYield.toLocaleString(), unc: tr.uncertaintyPct,
+      area: trCap ? (stats.area / 10000).toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
+      share: trCap ? Math.round(trCap.usableShare * 100) : '—',
+      eff: trCap ? (trCap.moduleEfficiency * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
+      kwp: trCap ? Math.round(trCap.kWp).toLocaleString() : '—', haPerMWp: trCap && trCap.haPerMWp ? trCap.haPerMWp.toFixed(2) : '—',
+    })
     : '';
 
   const rowsCard = document.getElementById('stat-rows-card');
@@ -1410,9 +1472,8 @@ function renderStats(data, stats) {
 
   const cap = stats.capacity;
   const fmt1 = (v) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
-  const mwp = (kWp) => (kWp >= 10000 ? (kWp / 1000).toFixed(1) : (kWp / 1000).toFixed(2));
   document.getElementById('stat-capacity').textContent = cap
-    ? `${mwp(cap.kWp)} MWp · ${Math.round(cap.mwhP50).toLocaleString()}` +
+    ? `${mwpLabel(cap.kWp)} MWp · ${Math.round(cap.mwhP50).toLocaleString()}` +
       (cap.mwhP90 != null ? ` / ${Math.round(cap.mwhP90).toLocaleString()}` : '') + ' MWh'
     : '—';
   document.getElementById('stat-capacity-card').title = cap
@@ -1572,11 +1633,17 @@ function buildInitialPrompt(stats) {
       : '') +
     (stats.economics ? economicsPromptLine(stats.economics) : '') +
     (stats.tracker
-      ? `SINGLE-AXIS TRACKER ALTERNATIVE (horizontal north-south axis, ideal tracking with no rotation limit, no backtracking, ` +
-        `no row shading, flat ground; same data, losses and horizon): ${stats.tracker.yield} kWh/kWp/yr, ` +
-        `${stats.tracker.gainPct >= 0 ? '+' : ''}${stats.tracker.gainPct}% over the fixed array at optimal tilt. ` +
-        `Against PVGIS at seven sites: ${stats.tracker.uncertaintyPct}% RMS error, gain overrated by about 3 points on average, ` +
-        `so treat it as an upper estimate. Capacity, economics and P90 are for the fixed array only.\n`
+      ? `SINGLE-AXIS TRACKER ALTERNATIVE (horizontal north-south axis rows at ground coverage ratio ${stats.tracker.gcr.toFixed(2)}, ` +
+        `${stats.tracker.limit == null ? 'no rotation limit' : `rotation limit ±${stats.tracker.limit}°`}, backtracking so rows do not shade each other, ` +
+        `flat ground; same data, losses and horizon): ${stats.tracker.yield} kWh/kWp/yr, ` +
+        `${stats.tracker.gainPct >= 0 ? '+' : ''}${stats.tracker.gainPct}% over the fixed array at optimal tilt; ` +
+        `backtracking costs ${stats.tracker.backtrackingLossPct}% against an ideal tracker (${stats.tracker.idealYield}). ` +
+        (stats.tracker.capacity
+          ? `Tracker layout capacity ${(stats.tracker.capacity.kWp / 1000).toFixed(2)} MWp DC, ${Math.round(stats.tracker.capacity.mwh)} MWh/yr. `
+          : '') +
+        `Uncertainty: the ideal tracker is ${stats.tracker.uncertaintyPct}% RMS off PVGIS at seven sites with the gain overrated by about 3 points, ` +
+        `and the model's excess beam at low sun also overstates the backtracking loss; no validated reference with backtracking was available. ` +
+        `Economics and P90 are for the fixed array only.\n`
       : '') +
     (stats.horizon && stats.horizonLossPct != null
       ? `TERRAIN HORIZON (Copernicus DEM, 48 directions to 25 km; beam blocked below the skyline, all yields above include it): ` +

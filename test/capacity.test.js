@@ -71,3 +71,29 @@ test('settings in percent: decimal commas, clamping and defaults', () => {
   assert.equal(C.usableShareFraction(2), 0.1);
   assert.equal(C.usableShareFraction('abc'), 1);
 });
+
+// ─── Tracker settings (issue #53) ───
+
+test('tracker GCR: a ratio, default 0.33, clamped to 0.1–0.9', () => {
+  assert.equal(C.DEFAULTS.trackerGcr, 0.33);
+  assert.equal(C.trackerGcrSetting('0,4'), 0.4);
+  assert.equal(C.trackerGcrSetting(0.05), 0.1);
+  assert.equal(C.trackerGcrSetting('2'), 0.9);
+  assert.equal(C.trackerGcrSetting(''), 0.33);
+  assert.equal(C.trackerGcrSetting(undefined), 0.33);
+});
+
+test('tracker rotation limit: blank is none, otherwise clamped to 0–90°', () => {
+  assert.equal(C.trackerLimitSetting(''), null);
+  assert.equal(C.trackerLimitSetting(null), null);
+  assert.equal(C.trackerLimitSetting('abc'), null);
+  assert.equal(C.trackerLimitSetting('60'), 60);
+  assert.equal(C.trackerLimitSetting(-5), 0);
+  assert.equal(C.trackerLimitSetting(120), 90);
+});
+
+test('a tracker layout at GCR 0.33 with 21% modules: 0.69 MWp per hectare', () => {
+  const c = C.siteCapacity({ areaM2: 10000, gcr: C.DEFAULTS.trackerGcr });
+  assert.ok(Math.abs(c.kWp - 693) < 1e-9);
+  assert.ok(Math.abs(c.haPerMWp - 1.443) < 0.001);
+});

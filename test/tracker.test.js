@@ -135,3 +135,50 @@ test('the model puts about 4 times PVGIS\'s share of the year\'s DNI below 5° o
     assert.ok(Math.abs(above20(ours) - above20(pvgis)) < 0.06, `${s.name} above 20°`);
   }
 });
+
+// ─── Backtracking (issue #53) ───
+
+test('tracker rotation and incidence match pvlib singleaxis, with and without backtracking', () => {
+  const F = require('./fixtures/tracker-pvlib.json');
+  let n = 0;
+  for (const c of F.cases) {
+    for (const [lat, day, hourAngle, theta, aoi] of c.points) {
+      const a = M.trackerAngles(lat, day, hourAngle, { limit: c.maxAngle, gcr: c.backtrack ? c.gcr : null });
+      // pvlib turns positive towards the west, the app towards the east.
+      assert.ok(Math.abs(a.rotation + theta) < 1e-3, `${lat} ${day} ${hourAngle}: ${a.rotation} vs ${-theta}`);
+      assert.ok(Math.abs(a.incidence - aoi) < 1e-3);
+      n++;
+    }
+  }
+  assert.ok(n > 1500, `${n} positions`);
+  assert.equal(M.trackerAngles(52, 355, 120), null); // sun down
+});
+
+test('backtracking turns the rows back exactly so that one row\'s shadow ends at the next', () => {
+  // Rows of width 1 at pitch 1/GCR: the shadow of a row tilted R, cast by a sun at true-tracking
+  // angle Rt, is cos(R − Rt)/cos Rt long across the axis; backtracking keeps it at the pitch.
+  for (const [lat, day, hourAngle] of [[52.23, 172, -100], [38.72, 80, 75], [-26.2, 355, -95]]) {
+    const gcr = 0.4;
+    const ideal = M.trackerAngles(lat, day, hourAngle).rotation * Math.PI / 180;
+    const bt = M.trackerAngles(lat, day, hourAngle, { gcr }).rotation * Math.PI / 180;
+    assert.ok(Math.abs(bt) < Math.abs(ideal));
+    assert.ok(Math.abs(Math.cos(bt - ideal) / Math.abs(Math.cos(ideal)) - 1 / gcr) < 1e-9);
+  }
+  // Near noon nothing changes.
+  assert.equal(M.trackerAngles(38.72, 80, 10, { gcr: 0.4 }).rotation, M.trackerAngles(38.72, 80, 10).rotation);
+});
+
+test('denser rows backtrack more and lose more; a flat tracker does not care', () => {
+  const c = seriesClim('lisbon');
+  const y = [null, 0.1, 0.25, 0.33, 0.4, 0.5].map(trackerGcr => tracker(c, 38.72, { trackerGcr }).annual);
+  for (let i = 0; i < y.length - 1; i++) assert.ok(y[i] >= y[i + 1], `${y[i]} vs ${y[i + 1]}`);
+  // GCR 0.1 backtracks only with the sun below about 6°, yet costs 2.2 % when written: that is
+  // the light the model puts at low sun, about 4 times PVGIS's share of DNI below 5° (#51).
+  assert.ok(y[1] / y[0] > 0.97 && y[1] / y[0] < 0.99, `${y[1] / y[0]}`);
+  // When written, GCR 0.33: −8.1 % at Lisbon, overstated by the model's low-sun beam (#51).
+  assert.ok(y[3] / y[0] < 0.95 && y[3] / y[0] > 0.88, `${y[3] / y[0]}`);
+  const flat = (o) => tracker(c, 38.72, { trackerLimit: 0, ...o }).annual;
+  assert.ok(Math.abs(flat({ trackerGcr: 0.5 }) - flat({})) < 1e-9);
+  assert.throws(() => tracker(c, 38.72, { trackerGcr: 0 }), /GCR/);
+  assert.throws(() => tracker(c, 38.72, { trackerGcr: 1.5 }), /GCR/);
+});
