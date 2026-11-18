@@ -107,6 +107,14 @@ All notable changes to this project are documented here. The format follows
   tracker column (LCOE, payback, NPV, IRR) and the tracker layout's whole-site rows at
   its own MWp. Berkeley Lab sources disagree on the premium's sign over the years, so
   there is no default (#55).
+- **Hourly data against the mean day, same year as PVGIS (study, model unchanged).**
+  `hourlyYield`, `sunPosition` and `parsePowerHourly` in `solar-model.js` run the same
+  physics hour by hour on NASA POWER hourly data. NASA's hourly values belong to the hour
+  starting at their stamp, measured from the GHI centroid at seven sites (26–32 min before
+  solar noon at HH:00). Against PVGIS seriescalc 2020 at seven sites and four mountings,
+  hourly data fix the tracker (mean error +4.9% → −2.8%) and the low-sun DNI (0.9–1.1%
+  below 5°, PVGIS 0.9–1.2%), but fixed arrays get slightly worse, so over 28 cases the
+  mean day stays closer (MAE 3.66% vs 3.98%) and the app keeps it (#57).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said

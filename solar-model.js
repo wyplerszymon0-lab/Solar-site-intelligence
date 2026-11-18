@@ -286,6 +286,105 @@
     };
   }
 
+  // ─── Hourly data (issue #57) ───
+  // Sun position for latitude/longitude at a UTC time (ms): the NOAA general solar position
+  // (Spencer's series for declination and the equation of time). Returns the sun vector's
+  // east, north and up components and the day of the year.
+  function sunPosition(lat, lon, utcMs) {
+    const t = new Date(utcMs);
+    const year = t.getUTCFullYear();
+    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    const doy = Math.floor((utcMs - Date.UTC(year, 0, 1)) / 86400000) + 1;
+    const hour = t.getUTCHours() + t.getUTCMinutes() / 60 + t.getUTCSeconds() / 3600;
+    const g = 2 * Math.PI / (leap ? 366 : 365) * (doy - 1 + (hour - 12) / 24);
+    const eotMin = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) -
+      0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+    const d = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) +
+      0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+    const omega = ((hour * 60 + eotMin + 4 * lon) / 4 - 180) * DEG; // hour angle
+    const phi = lat * DEG;
+    return {
+      up: Math.sin(phi) * Math.sin(d) + Math.cos(phi) * Math.cos(d) * Math.cos(omega),
+      east: -Math.cos(d) * Math.sin(omega),
+      north: Math.cos(phi) * Math.sin(d) - Math.sin(phi) * Math.cos(d) * Math.cos(omega),
+      dayOfYear: doy,
+    };
+  }
+
+  // NASA POWER hourly JSON (time-standard=UTC) as arrays from the first hour:
+  // { startMs, ghi[], diffuse[], dni[] (Wh/m² in the hour), temp[] (°C) }, null where missing.
+  // A value belongs to the hour starting at its stamp: NASA's documentation does not say,
+  // but its clear-sky GHI is centred 28 min after the stamp's solar time (issue #57).
+  function parsePowerHourly(json) {
+    const p = json?.properties?.parameter;
+    const keys = Object.keys(p?.ALLSKY_SFC_SW_DWN ?? {}).sort();
+    if (!keys.length) throw new Error('NASA POWER returned no hourly data for this location');
+    const k0 = keys[0];
+    const col = (name) => keys.map(k => { const v = p?.[name]?.[k]; return typeof v === 'number' && v > -900 ? v : null; });
+    return {
+      startMs: Date.UTC(+k0.slice(0, 4), +k0.slice(4, 6) - 1, +k0.slice(6, 8), +k0.slice(8, 10)),
+      ghi: col('ALLSKY_SFC_SW_DWN'), diffuse: col('ALLSKY_SFC_SW_DIFF'), dni: col('ALLSKY_SFC_SW_DNI'), temp: col('T2M'),
+    };
+  }
+
+  // Yield from hourly data: the same physics as monthlyYield (Hay–Davies or isotropic sky,
+  // ASHRAE reflection, the same temperature rule and losses, horizon, fixed or tracking
+  // mounting with backtracking), applied hour by hour with the sun at the middle of each
+  // hour, so the beam at low sun and any morning/afternoon asymmetry come from the data
+  // instead of a distribution over the mean day. The circumsolar beam factor
+  // cos θ / cos Z is capped at cos Z ≥ 0.087 (5°), the usual guard of hourly Hay–Davies.
+  // hours: parsePowerHourly()'s shape; values in the hour (Wh/m²), temp in °C.
+  // Returns kWh per kWp by calendar month and for the whole series.
+  function hourlyYield(hours, lat, lon, tilt, compassAz, options = {}) {
+    const o = { ...DEFAULTS, ...options };
+    if (!SKY_MODELS.includes(o.skyModel)) throw new Error(`unknown sky model: ${o.skyModel}`);
+    if (!MOUNTINGS.includes(o.mounting)) throw new Error(`unknown mounting: ${o.mounting}`);
+    const tracking = o.mounting === 'single-axis';
+    const maxR = maxRotation(o.trackerLimit), gcr = validGcr(o.trackerGcr);
+    const k = (deg) => (o.iamB0 > 0 ? incidenceModifier(Math.cos(deg * DEG), o.iamB0) : 1);
+    const fixedN = {
+      east: Math.sin(tilt * DEG) * Math.sin(compassAz * DEG),
+      north: Math.sin(tilt * DEG) * Math.cos(compassAz * DEG),
+      up: Math.cos(tilt * DEG),
+    };
+    const fixedK = { sky: k(skyIncidenceDeg(tilt)), ground: k(groundIncidenceDeg(tilt)) };
+    const monthly = new Array(12).fill(0);
+    let poaTotal = 0, used = 0;
+    for (let i = 0; i < hours.ghi.length; i++) {
+      const G = hours.ghi[i], Dh = hours.diffuse[i], B = hours.dni[i], T = hours.temp[i];
+      if (G == null || Dh == null || B == null || T == null || G <= 0) continue;
+      used++;
+      const startMs = hours.startMs + i * 3600000;
+      const s = sunPosition(lat, lon, startMs + 1800000);
+      let n = fixedN, kk = fixedK, beta = tilt;
+      if (tracking) {
+        const { R } = trackerRotation(s.east, Math.max(s.up, 1e-9), maxR, gcr);
+        n = { east: Math.sin(R), north: 0, up: Math.cos(R) };
+        beta = Math.abs(R) / DEG;
+        kk = { sky: k(skyIncidenceDeg(beta)), ground: k(groundIncidenceDeg(beta)) };
+      }
+      const cosT = s.east * n.east + s.north * n.north + s.up * n.up;
+      const sunUp = s.up > 0;
+      let shaded = false;
+      if (sunUp && o.horizon) {
+        const az = Math.atan2(s.east, s.north) / DEG; // compass bearing
+        shaded = Math.asin(Math.min(1, s.up)) / DEG < horizonAt(o.horizon, (az + 360) % 360);
+      }
+      const reflect = cosT > 0 ? (o.iamB0 > 0 ? incidenceModifier(cosT, o.iamB0) : 1) : 0;
+      const E0n = SOLAR_CONSTANT * 1000 * (1 + 0.033 * Math.cos(2 * Math.PI * s.dayOfYear / 365));
+      const A = o.skyModel === 'hay-davies' && sunUp ? Math.min(1, B / E0n) : 0;
+      const beamOn = sunUp && !shaded ? B * Math.max(0, cosT) * reflect : 0;
+      const circumsolar = sunUp && !shaded ? Dh * A * Math.max(0, cosT) / Math.max(s.up, 0.087) * reflect : 0;
+      const poa = beamOn + circumsolar +
+        Dh * (1 - A) * (1 + n.up) / 2 * kk.sky +
+        G * o.groundAlbedo * (1 - n.up) / 2 * kk.ground;
+      const tempFactor = 1 + o.tempCoeff * (T + o.cellTempRise - 25);
+      monthly[new Date(startMs).getUTCMonth()] += poa / 1000 * (1 - o.systemLoss) * tempFactor;
+      poaTotal += poa / 1000;
+    }
+    return { monthly, annual: monthly.reduce((a, b) => a + b, 0), poaAnnual: poaTotal, hoursUsed: used };
+  }
+
   // Annual yield for every whole-degree tilt from 0 to maxTilt at a fixed azimuth.
   // Index i is the yield at i degrees.
   function tiltCurve(climatology, lat, compassAz, maxTilt = 75, options = {}) {
@@ -440,6 +539,7 @@
     exceedanceWithEstimate, ESTIMATE_UNCERTAINTY, TRACKER_ESTIMATE_UNCERTAINTY, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
     extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES, MOUNTINGS, trackerDayFactors, trackerAngles, dayMoments,
+    sunPosition, parsePowerHourly, hourlyYield,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;

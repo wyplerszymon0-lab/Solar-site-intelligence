@@ -278,7 +278,29 @@ Neither improves everything:
 - **Hottel's clear-sky shape** fixes the tracker on average. But it gives fixed arrays slightly larger errors (Lisbon west −3.4%) and too little DNI at 5–20°.
 - **The product of the two** overcorrects.
 
-Trying further variants until one matched PVGIS would amount to fitting to it, so the model stays as it is and the tracker card says it is an upper estimate. A real fix needs the hourly data itself, not a better shape for the mean day. That is the same conclusion as for the clearer afternoons ([issue #41](#why-east-and-west-arrays-were-the-largest-errors-issue-41)).
+Trying further variants until one matched PVGIS would amount to fitting to it, so the model stays as it is and the tracker card says it is an upper estimate. A real fix needs the hourly data itself, not a better shape for the mean day. That is the same conclusion as for the clearer afternoons ([issue #41](#why-east-and-west-arrays-were-the-largest-errors-issue-41)). Hourly data were then tried ([below](#hourly-data-instead-of-the-mean-day-issue-57)).
+
+#### Hourly data instead of the mean day? (issue #57)
+
+NASA POWER also serves hourly GHI, diffuse irradiance, DNI and temperature. That is about 650 kB per site and year, and the API answers browsers (CORS `*`). The model has an hourly version, `hourlyYield` in [`solar-model.js`](solar-model.js). It uses the same physics as the mean day: Hay–Davies sky, ASHRAE reflection, the same temperature rule, the horizon, and fixed or tracking mounting with backtracking. Only the data differ: the sun is placed at the middle of each hour, so the beam at low sun and any morning/afternoon asymmetry come from the data and not from a distribution.
+
+**The timestamp convention had to be measured.** NASA's documentation does not say whether an hourly value belongs to the hour starting or ending at its stamp, and ±30 minutes moves east and west arrays by 6–12%. The data answer it themselves: with values placed at HH:00 UTC, the day's GHI centroid falls 26–32 minutes before solar noon at all seven sites (median of 2020). So a value covers the hour starting at its stamp. A test checks this, using NASA's data alone and not PVGIS.
+
+**The low-sun beam is right:** hourly NASA DNI puts 0.9–1.1% of the year's DNI below 5° of sun elevation, against PVGIS's 0.9–1.2%. The mean day puts 4.1–4.6% there.
+
+**Validation:** seven sites, the year 2020 on both sides. PVGIS 5.3 `seriescalc` sums for 2020 (1 kWp, 14% losses, no horizon) are compared with the hourly model on NASA's hourly 2020 data and the mean day on NASA's monthly 2020 data. The fixture, recorded by [`tools/make-hourly-fixture.mjs`](tools/make-hourly-fixture.mjs), holds the NASA hours as compact integers, gzipped to 230 kB, and PVGIS's annual sums only.
+
+| Against PVGIS 2020, 7 sites | Hourly: mean / MAE | Mean day: mean / MAE |
+| :--- | ---: | ---: |
+| Equator-facing, validation tilt | +0.2% / 3.36% | +1.9% / **3.20%** |
+| East 35° | −1.2% / 3.85% | +1.2% / **2.48%** |
+| West 35° | −2.4% / 3.61% | +2.1% / **3.15%** |
+| Tracker (N–S) | −2.8% / **5.10%** | +4.9% / 5.81% |
+| **All 28** | −1.5% / 3.98% | +2.5% / **3.66%** |
+
+<sub>The PVGIS tracker is `trackingtype=5` (inclined axis) at 0° slope, the mounting of the [tracker validation](#single-axis-tracker-issue-49). `trackingtype=1` (horizontal N–S axis) gave Sydney, the one PVGIS-ERA5 site, 1360 kWh/kWp, below its fixed array, against 1849 for type 5.</sub>
+
+Hourly data fix what they were meant to fix: the tracker is no longer overrated, and its mean error goes from +4.9% to −2.8%. But they make fixed arrays slightly worse, with errors mostly negative (Cairo −4 to −5%, Sydney −5%), so across all 28 cases the mean day stays a little closer to PVGIS. RMS favours hourly data (4.79 against 5.13%), because the mean day's largest errors are trackers. The issue's rule was to adopt hourly data only if they beat the mean day across the sites, and they do not, so **the app keeps the mean day**. The study and `hourlyYield` stay in the code with their tests, for the day a second year or a better hourly diffuse split tips the balance. The likely suspect is NASA's own hourly split of GHI into beam and diffuse, since the same physics on the monthly means does better. That was not tested here.
 
 #### Tracker rows and backtracking (issue #53)
 
