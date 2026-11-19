@@ -300,7 +300,22 @@ NASA POWER also serves hourly GHI, diffuse irradiance, DNI and temperature. That
 
 <sub>The PVGIS tracker is `trackingtype=5` (inclined axis) at 0° slope, the mounting of the [tracker validation](#single-axis-tracker-issue-49). `trackingtype=1` (horizontal N–S axis) gave Sydney, the one PVGIS-ERA5 site, 1360 kWh/kWp, below its fixed array, against 1849 for type 5.</sub>
 
-Hourly data fix what they were meant to fix: the tracker is no longer overrated, and its mean error goes from +4.9% to −2.8%. But they make fixed arrays slightly worse, with errors mostly negative (Cairo −4 to −5%, Sydney −5%), so across all 28 cases the mean day stays a little closer to PVGIS. RMS favours hourly data (4.79 against 5.13%), because the mean day's largest errors are trackers. The issue's rule was to adopt hourly data only if they beat the mean day across the sites, and they do not, so **the app keeps the mean day**. The study and `hourlyYield` stay in the code with their tests, for the day a second year or a better hourly diffuse split tips the balance. The likely suspect is NASA's own hourly split of GHI into beam and diffuse, since the same physics on the monthly means does better. That was not tested here.
+Hourly data fix what they were meant to fix: the tracker is no longer overrated, and its mean error goes from +4.9% to −2.8%. But they make fixed arrays slightly worse, with errors mostly negative (Cairo −4 to −5%, Sydney −5%), so across all 28 cases the mean day stays a little closer to PVGIS. RMS favours hourly data (4.79 against 5.13%), because the mean day's largest errors are trackers. The issue's rule was to adopt hourly data only if they beat the mean day across the sites, and they do not, so **the app keeps the mean day**. The study and `hourlyYield` stay in the code with their tests, for the day a second year or a better hourly diffuse split tips the balance. The likely suspect was NASA's own hourly split of GHI into beam and diffuse. It was tested next ([below](#is-it-nasas-hourly-split-issue-59)) and ruled out: the gap on fixed arrays is mostly the temperature rule.
+
+##### Is it NASA's hourly split? (issue #59)
+
+No. NASA's three hourly columns agree with each other: over the year's daylight hours, DNI·cos Z + DHI is within −2.6% to +1.8% of GHI at the seven sites. Splitting NASA's GHI again with the Erbs et al. (1982) decomposition, checked against pvlib's `erbs`, makes things worse. It puts more of the light in the diffuse part at six sites of seven, and the MAE against PVGIS 2020 rises:
+
+| Against PVGIS 2020 | NASA split | Erbs split | Mean day |
+| :--- | ---: | ---: | ---: |
+| Fixed arrays (21) | 3.61% | 3.74% | **2.94%** |
+| All 28 | 3.98% | 4.89% | **3.66%** |
+
+The rule set in the issue, Erbs bringing fixed arrays below the mean day, fails, so the split is ruled out.
+
+**What the gap is instead: temperature.** NASA's hourly GHI and DHI sum to the monthly values to within 0.1%, so both models see the same light. The difference is in the temperature rule, cell = air + 20 °C. It was set for the mean day, whose temperature is the 24-hour mean. Hourly data apply it to the actual hour, and the hours that make energy are the warm ones: weighted by irradiance, they are 1.5 °C (Lisbon) to 5.7 °C (Johannesburg) above the monthly mean. On equator-facing arrays, hourly data give 1.7% less than the mean day with the temperature term and 0.2% less without it. East, west and trackers keep a gap without it (−1.4%, −2.6% and −6.2%). That part is the mean day's morning/afternoon symmetry and low-sun beam ([#41](#why-east-and-west-arrays-were-the-largest-errors-issue-41), [#51](#beam-at-low-sun-issue-51)), where the hourly data are the more physical of the two.
+
+So a fair hourly model needs a cell temperature that depends on the hour's irradiance (and wind), as PVGIS uses, and not a fixed +20 °C. That was not tried here, so the rule could not be fitted after seeing the results. Tests: [`test/hourly-split.test.js`](test/hourly-split.test.js).
 
 #### Tracker rows and backtracking (issue #53)
 
