@@ -115,6 +115,12 @@ All notable changes to this project are documented here. The format follows
   hourly data fix the tracker (mean error +4.9% → −2.8%) and the low-sun DNI (0.9–1.1%
   below 5°, PVGIS 0.9–1.2%), but fixed arrays get slightly worse, so over 28 cases the
   mean day stays closer (MAE 3.66% vs 3.98%) and the app keeps it (#57).
+- **Hourly study: NASA's beam/diffuse split ruled out (study, model unchanged).**
+  NASA's hourly DNI·cos Z + DHI closes on GHI within 3% at seven sites, and an Erbs (1982)
+  re-split, checked against pvlib, does worse (fixed arrays MAE 3.74% vs 3.61%; mean day
+  2.94%). The gap on fixed arrays is mostly the T + 20 °C rule applied to warm daylight
+  hours (1.5–5.7 °C above the monthly mean): without the temperature term, hourly data and
+  the mean day agree within 0.2% on equator-facing arrays (#59).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said
