@@ -287,6 +287,19 @@
   }
 
   // ─── Hourly data (issue #57) ───
+  const MODULE_TEMPS = ['fixed-rise', 'faiman'];
+  const POWER_MODELS = ['linear', 'huld'];
+  // Huld et al. (2011) c-Si coefficients k1–k6 as on PVGIS 5's methods page (pvlib 'pvgis5').
+  const HULD_CSI = [-0.017237, -0.040465, -0.004702, 0.000149, 0.000170, 0.000005];
+
+  // Relative module efficiency at in-plane irradiance G (W/m²) and module temperature Tm (°C).
+  function huldEfficiency(G, Tm) {
+    if (!(G > 0)) return 0;
+    const [k1, k2, k3, k4, k5, k6] = HULD_CSI;
+    const l = Math.log(G / 1000), t = Tm - 25;
+    return 1 + k1 * l + k2 * l * l + k3 * t + k4 * t * l + k5 * t * l * l + k6 * t * t;
+  }
+
   // Sun position for latitude/longitude at a UTC time (ms): the NOAA general solar position
   // (Spencer's series for declination and the equation of time). Returns the sun vector's
   // east, north and up components and the day of the year.
@@ -335,10 +348,20 @@
   // cos θ / cos Z is capped at cos Z ≥ 0.087 (5°), the usual guard of hourly Hay–Davies.
   // hours: parsePowerHourly()'s shape; values in the hour (Wh/m²), temp in °C.
   // Returns kWh per kWp by calendar month and for the whole series.
+  // Options for the module (issue #61), study only:
+  //  - moduleTemp 'faiman': module temperature T + G/(U0 + U1·wind) from the hour's in-plane
+  //    irradiance (W/m²) and wind (hours.wind, m/s), with PVGIS's free-standing c-Si
+  //    coefficients by default, instead of the fixed T + cellTempRise;
+  //  - power 'huld': the Huld et al. (2011) relative efficiency with PVGIS 5's c-Si
+  //    coefficients, which also covers the loss at low irradiance, instead of tempCoeff.
   function hourlyYield(hours, lat, lon, tilt, compassAz, options = {}) {
-    const o = { ...DEFAULTS, ...options };
+    const o = { ...DEFAULTS, moduleTemp: 'fixed-rise', faimanU0: 26.9, faimanU1: 6.2, power: 'linear', ...options };
     if (!SKY_MODELS.includes(o.skyModel)) throw new Error(`unknown sky model: ${o.skyModel}`);
     if (!MOUNTINGS.includes(o.mounting)) throw new Error(`unknown mounting: ${o.mounting}`);
+    if (!MODULE_TEMPS.includes(o.moduleTemp)) throw new Error(`unknown module temperature model: ${o.moduleTemp}`);
+    if (!POWER_MODELS.includes(o.power)) throw new Error(`unknown power model: ${o.power}`);
+    const faiman = o.moduleTemp === 'faiman';
+    if (faiman && !Array.isArray(hours.wind)) throw new Error('the Faiman module temperature needs hours.wind');
     const tracking = o.mounting === 'single-axis';
     const maxR = maxRotation(o.trackerLimit), gcr = validGcr(o.trackerGcr);
     const k = (deg) => (o.iamB0 > 0 ? incidenceModifier(Math.cos(deg * DEG), o.iamB0) : 1);
@@ -352,7 +375,8 @@
     let poaTotal = 0, used = 0;
     for (let i = 0; i < hours.ghi.length; i++) {
       const G = hours.ghi[i], Dh = hours.diffuse[i], B = hours.dni[i], T = hours.temp[i];
-      if (G == null || Dh == null || B == null || T == null || G <= 0) continue;
+      const W = faiman ? hours.wind[i] : 0;
+      if (G == null || Dh == null || B == null || T == null || W == null || G <= 0) continue;
       used++;
       const startMs = hours.startMs + i * 3600000;
       const s = sunPosition(lat, lon, startMs + 1800000);
@@ -378,8 +402,9 @@
       const poa = beamOn + circumsolar +
         Dh * (1 - A) * (1 + n.up) / 2 * kk.sky +
         G * o.groundAlbedo * (1 - n.up) / 2 * kk.ground;
-      const tempFactor = 1 + o.tempCoeff * (T + o.cellTempRise - 25);
-      monthly[new Date(startMs).getUTCMonth()] += poa / 1000 * (1 - o.systemLoss) * tempFactor;
+      const Tm = faiman ? T + poa / (o.faimanU0 + o.faimanU1 * W) : T + o.cellTempRise;
+      const efficiency = o.power === 'huld' ? huldEfficiency(poa, Tm) : 1 + o.tempCoeff * (Tm - 25);
+      monthly[new Date(startMs).getUTCMonth()] += poa / 1000 * (1 - o.systemLoss) * efficiency;
       poaTotal += poa / 1000;
     }
     return { monthly, annual: monthly.reduce((a, b) => a + b, 0), poaAnnual: poaTotal, hoursUsed: used };
@@ -539,7 +564,7 @@
     exceedanceWithEstimate, ESTIMATE_UNCERTAINTY, TRACKER_ESTIMATE_UNCERTAINTY, FIRST_SERIES_YEAR, horizonAt, sunPath,
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
     extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES, MOUNTINGS, trackerDayFactors, trackerAngles, dayMoments,
-    sunPosition, parsePowerHourly, hourlyYield,
+    sunPosition, parsePowerHourly, hourlyYield, huldEfficiency,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;

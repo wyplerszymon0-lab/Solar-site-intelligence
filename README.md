@@ -315,7 +315,24 @@ The rule set in the issue, Erbs bringing fixed arrays below the mean day, fails,
 
 **What the gap is instead: temperature.** NASA's hourly GHI and DHI sum to the monthly values to within 0.1%, so both models see the same light. The difference is in the temperature rule, cell = air + 20 °C. It was set for the mean day, whose temperature is the 24-hour mean. Hourly data apply it to the actual hour, and the hours that make energy are the warm ones: weighted by irradiance, they are 1.5 °C (Lisbon) to 5.7 °C (Johannesburg) above the monthly mean. On equator-facing arrays, hourly data give 1.7% less than the mean day with the temperature term and 0.2% less without it. East, west and trackers keep a gap without it (−1.4%, −2.6% and −6.2%). That part is the mean day's morning/afternoon symmetry and low-sun beam ([#41](#why-east-and-west-arrays-were-the-largest-errors-issue-41), [#51](#beam-at-low-sun-issue-51)), where the hourly data are the more physical of the two.
 
-So a fair hourly model needs a cell temperature that depends on the hour's irradiance (and wind), as PVGIS uses, and not a fixed +20 °C. That was not tried here, so the rule could not be fitted after seeing the results. Tests: [`test/hourly-split.test.js`](test/hourly-split.test.js).
+So a fair hourly model needs a cell temperature that depends on the hour's irradiance (and wind), as PVGIS uses, and not a fixed +20 °C. That was not tried here, so the rule could not be fitted after seeing the results. It was tried next, with its own rule ([below](#a-module-temperature-as-pvgis-issue-61)). Tests: [`test/hourly-split.test.js`](test/hourly-split.test.js).
+
+##### A module temperature as PVGIS? (issue #61)
+
+PVGIS's [methods page](https://joint-research-centre.ec.europa.eu/photovoltaic-geographical-information-system-pvgis/getting-started-pvgis/pvgis-data-sources-calculation-methods_en) gives its module model:
+- **Module temperature:** Faiman (2008), T + G / (U0 + U1·wind), with U0 = 26.9 W/(°C·m²) and U1 = 6.2 W·s/(°C·m³) for free-standing c-Si.
+- **Power:** the Huld et al. (2011) efficiency, which also covers the loss at low irradiance.
+
+`hourlyYield` has both as options (`moduleTemp: 'faiman'`, `power: 'huld'`, with PVGIS 5's c-Si coefficients), checked against pvlib 0.16.1. The wind is NASA POWER's hourly WS10M for 2020, recorded by [`tools/make-wind-fixture.mjs`](tools/make-wind-fixture.mjs). The page does not say which wind height PVGIS uses, so 10 m is an assumption. Only published coefficients are used, and nothing is fitted to PVGIS.
+
+| MAE against PVGIS 2020 | Fixed (21) | All 28 | Trackers (7) |
+| :--- | ---: | ---: | ---: |
+| Hourly, T + 20 °C | 3.61% | 3.98% | 5.10% |
+| Hourly, A: Faiman | 3.33% | **3.37%** | **3.52%** |
+| Hourly, B: Faiman + Huld | 3.40% | 3.64% | 4.35% |
+| Mean day | **2.94%** | 3.66% | 5.81% |
+
+Both variants bring hourly data closer to PVGIS than the fixed +20 °C. Faiman modules run cooler, so A raises yields (mean +1.6% over all 28, against −1.5%), and Huld's low-light loss takes most of that back (B −1.6%). Both beat the mean day over all 28 cases, mostly through the trackers. On fixed arrays neither does. The issue's rule asked for both, so **the app keeps the mean day**. Tests: [`test/hourly-temperature.test.js`](test/hourly-temperature.test.js).
 
 #### Tracker rows and backtracking (issue #53)
 

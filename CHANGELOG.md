@@ -121,6 +121,12 @@ All notable changes to this project are documented here. The format follows
   2.94%). The gap on fixed arrays is mostly the T + 20 °C rule applied to warm daylight
   hours (1.5–5.7 °C above the monthly mean): without the temperature term, hourly data and
   the mean day agree within 0.2% on equator-facing arrays (#59).
+- **Hourly study: module temperature and power as PVGIS (study, app unchanged).**
+  `hourlyYield` options `moduleTemp: 'faiman'` (PVGIS's c-Si U0 26.9, U1 6.2, NASA hourly
+  WS10M) and `power: 'huld'` (Huld 2011, PVGIS 5 c-Si), checked against pvlib. Both bring
+  hourly data closer to PVGIS 2020 than T + 20 °C (Faiman: MAE 3.37% over 28 cases, against
+  3.98%) and beat the mean day over all 28 (3.66%), but not on fixed arrays (3.33% and 3.40%
+  against 2.94%), so the app keeps the mean day (#61).
 
 ### Fixed
 - **README said two fixtures were 2001–2025 climatology.** NASA POWER's header has said
