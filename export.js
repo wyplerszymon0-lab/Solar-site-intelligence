@@ -11,6 +11,8 @@
     return yieldSource === 'satellite' ? 'nasa_power' : 'heuristic';
   }
 
+  const round = (x, digits) => Math.round(x * 10 ** digits) / 10 ** digits;
+
   function buildGeoJSON(data, stats) {
     const features = data.map((pt, i) => ({
       type: 'Feature',
@@ -57,6 +59,12 @@
           tracker_rotation_limit_deg: stats.yieldSource === 'satellite' && stats.tracker ? stats.tracker.limit : null,
           tracker_capacity_kwp: stats.yieldSource === 'satellite' && stats.tracker?.capacity ? Math.round(stats.tracker.capacity.kWp) : null,
           tracker_energy_mwh_per_year: stats.yieldSource === 'satellite' && stats.tracker?.capacity ? Math.round(stats.tracker.capacity.mwh) : null,
+          // The ground as a least-squares plane through the surveyed heights (issue #63); null if undefined.
+          terrain_slope_deg: stats.terrain ? round(stats.terrain.slopeDeg, 2) : null,
+          terrain_aspect_deg: stats.terrain && stats.terrain.aspectDeg != null ? round(stats.terrain.aspectDeg, 1) : null,
+          terrain_grade_north_pct: stats.terrain ? round(stats.terrain.gradeNorthPct, 2) : null,
+          terrain_grade_east_pct: stats.terrain ? round(stats.terrain.gradeEastPct, 2) : null,
+          terrain_rms_m: stats.terrain ? round(stats.terrain.rmsM, 3) : null,
         },
       });
     }

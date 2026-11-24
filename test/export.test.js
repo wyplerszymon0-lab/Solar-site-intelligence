@@ -48,6 +48,11 @@ test('site boundary carries annual and monthly yield with its source', () => {
     tracker_rotation_limit_deg: null,
     tracker_capacity_kwp: null,
     tracker_energy_mwh_per_year: null,
+    terrain_slope_deg: null,
+    terrain_aspect_deg: null,
+    terrain_grade_north_pct: null,
+    terrain_grade_east_pct: null,
+    terrain_rms_m: null,
   });
   assert.equal(boundary.properties.yield_monthly_kwh_per_kwp.length, 12);
 });
@@ -138,6 +143,15 @@ test('the tracker layout: GCR, rotation limit, capacity and energy, rounded', ()
     [0.33, 60, 3457, 3941]);
   const free = buildGeoJSON(data, stats({ tracker: { ...tracker, limit: null, capacity: undefined } })).features.at(-1).properties;
   assert.deepEqual([free.tracker_rotation_limit_deg, free.tracker_capacity_kwp, free.tracker_energy_mwh_per_year], [null, null, null]);
+});
+
+test('the terrain plane is exported rounded, with no aspect on level ground', () => {
+  const terrain = { slopeDeg: 3.33928, aspectDeg: 329.1385, gradeNorthPct: -4.99581, gradeEastPct: 2.98031, rmsM: 0.47325, n: 49 };
+  const p = buildGeoJSON(data, stats({ terrain })).features.at(-1).properties;
+  assert.deepEqual([p.terrain_slope_deg, p.terrain_aspect_deg, p.terrain_grade_north_pct, p.terrain_grade_east_pct, p.terrain_rms_m],
+    [3.34, 329.1, -5, 2.98, 0.473]);
+  const level = buildGeoJSON(data, stats({ terrain: { ...terrain, slopeDeg: 0, aspectDeg: null } })).features.at(-1).properties;
+  assert.deepEqual([level.terrain_slope_deg, level.terrain_aspect_deg], [0, null]);
 });
 
 test('the years behind the yield are exported only for satellite data', () => {

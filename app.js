@@ -94,6 +94,9 @@ const I18N = {
     'stat.avgSlope': 'Avg Slope °',
     'stat.avgAz': 'Avg Azimuth °',
     'stat.avgElev': 'Avg Elevation m',
+    'stat.terrain': 'Terrain, best-fit plane through the surveyed heights: slope · falls towards · grade N–S / E–W',
+    'stat.terrainTitle': 'Least-squares plane through the {n} points with an elevation, in local metres. The ground falls {slope}° towards {aspect}° (compass, 0° = north). Going north it rises {north}% (per 100 m), going east {east}%; a negative grade falls. The heights depart from the plane by {rms} m (RMS): a large value means uneven ground or an elevation outlier, and the plane is then only a rough summary. Not used in the yield or the row layout yet.',
+    'stat.terrainNone': 'Needs at least three points with an elevation, spread out in both directions: points along one line (a transect) give the slope along it only.',
     'stat.area': 'Site Area est. m²',
     'stat.rows': 'Est. Panel Rows',
     'stat.benchmark': 'Yield vs optimal orientation at this site',
@@ -293,6 +296,9 @@ const I18N = {
     'stat.avgSlope': 'Śr. nachylenie °',
     'stat.avgAz': 'Śr. azymut °',
     'stat.avgElev': 'Śr. wysokość m',
+    'stat.terrain': 'Teren, płaszczyzna dopasowana do zmierzonych wysokości: spadek · kierunek spadku · spadek N–S / E–W',
+    'stat.terrainTitle': 'Płaszczyzna najmniejszych kwadratów przez {n} punktów z wysokością, w lokalnych metrach. Teren opada o {slope}° w kierunku {aspect}° (kompas, 0° = północ). Na północ wznosi się o {north}% (na 100 m), na wschód o {east}%; wartość ujemna oznacza spadek. Wysokości odbiegają od płaszczyzny o {rms} m (RMS): duża wartość oznacza nierówny teren albo odstającą wysokość i wtedy płaszczyzna jest tylko przybliżeniem. Na razie nie wpływa na uzysk ani układ rzędów.',
+    'stat.terrainNone': 'Potrzeba co najmniej trzech punktów z wysokością, rozłożonych w obu kierunkach: punkty na jednej linii (przekrój) dają spadek tylko wzdłuż niej.',
     'stat.area': 'Szac. powierzchnia m²',
     'stat.rows': 'Szac. liczba rzędów',
     'stat.benchmark': 'Wydajność vs optymalna orientacja w tym miejscu',
@@ -713,7 +719,7 @@ function economicsFor(stats) {
 // Survey geometry lives in geometry.js (window.SiteGeometry), with its own tests.
 const {
   optimalAzimuth, azimuthDiff, circularMeanDeg, solarRating,
-  detectShading, detectOutliers, convexHull, polygonAreaM2,
+  detectShading, detectOutliers, convexHull, polygonAreaM2, terrainPlane,
 } = SiteGeometry;
 
 function estimateYield(lat, avgSlope, avgAzimuth) {
@@ -1034,13 +1040,14 @@ function computeSiteStats(data) {
   const benchmarkPct = Math.round((yieldEst - optimalYield) / optimalYield * 100);
   const shadingFlags = detectShading(data, centerLat);
   const outlierFlags = detectOutliers(data);
+  const terrain = terrainPlane(data); // the site's ground as a plane (issue #63), null if undefined
 
   const stats = {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
     systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, climPeriod, variability, horizon, horizonLossPct,
     facing, facingAz, hull, area, capacity, tracker,
-    spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal,
+    spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal, terrain,
   };
   stats.economics = economicsFor(stats);
   return stats;
@@ -1470,6 +1477,17 @@ function renderStats(data, stats) {
   document.getElementById('stat-avg-elev').textContent  = stats.avgElev  != null ? stats.avgElev.toFixed(0)  : '—';
   document.getElementById('stat-area').textContent      = stats.area > 0 ? stats.area.toLocaleString() : '—';
   document.getElementById('stat-rows').textContent      = stats.rows ?? '—';
+  const ter = stats.terrain, signed = (x) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}%`;
+  document.getElementById('stat-terrain').textContent = ter
+    ? `${ter.slopeDeg.toFixed(1)}° · ${ter.aspectDeg == null ? '—' : Math.round(ter.aspectDeg) % 360 + '°'} · ` +
+      `${signed(ter.gradeNorthPct)} / ${signed(ter.gradeEastPct)}`
+    : '—';
+  document.getElementById('stat-terrain-card').title = ter
+    ? t('stat.terrainTitle', {
+      n: ter.n, slope: ter.slopeDeg.toFixed(1), aspect: ter.aspectDeg == null ? '—' : Math.round(ter.aspectDeg) % 360,
+      north: ter.gradeNorthPct.toFixed(1), east: ter.gradeEastPct.toFixed(1), rms: ter.rmsM.toFixed(2),
+    })
+    : t('stat.terrainNone');
 
   const v = stats.variability;
   document.getElementById('stat-p90').textContent = v ? `${v.p50.toLocaleString()} / ${v.p90Year.toLocaleString()}` : '—';
@@ -1665,6 +1683,12 @@ function buildInitialPrompt(stats) {
     `SLOPE RANGE: ${slopes.length ? Math.min(...slopes).toFixed(1) + '° – ' + Math.max(...slopes).toFixed(1) + '°' : 'N/A'}\n` +
     `AVERAGE AZIMUTH (circular mean): ${stats.avgAz != null ? stats.avgAz.toFixed(1) : 'N/A'}°\n` +
     `ELEVATION RANGE: ${elevations.length ? Math.min(...elevations).toFixed(0) + ' – ' + Math.max(...elevations).toFixed(0) + ' m' : 'N/A'}\n` +
+    (stats.terrain
+      ? `TERRAIN (least-squares plane through ${stats.terrain.n} surveyed heights): slope ${stats.terrain.slopeDeg.toFixed(1)}°, ` +
+        `falling towards ${stats.terrain.aspectDeg == null ? 'no direction (level)' : Math.round(stats.terrain.aspectDeg) % 360 + '° (compass)'}; ` +
+        `grade ${stats.terrain.gradeNorthPct.toFixed(1)}% going north, ${stats.terrain.gradeEastPct.toFixed(1)}% going east; ` +
+        `heights depart from the plane by ${stats.terrain.rmsM.toFixed(2)} m RMS\n`
+      : `TERRAIN: no plane (fewer than three heights, or the points lie along one line)\n`) +
     `ESTIMATED ANNUAL YIELD AT MEASURED ORIENTATION: ${stats.yieldEst} kWh/kWp/yr\n` +
     `ESTIMATED ANNUAL YIELD AT OPTIMAL ORIENTATION (${stats.optTilt.toFixed(0)}° tilt): ${stats.optimalYield} kWh/kWp/yr\n` +
     (stats.ghiAnnual != null

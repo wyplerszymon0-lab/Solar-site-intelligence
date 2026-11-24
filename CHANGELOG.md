@@ -29,6 +29,11 @@ All notable changes to this project are documented here. The format follows
   (Open-Meteo) around the site give the skyline in 48 directions; the sun below it gives
   no beam, in every yield the app shows. Skyline within 1.1–2.0° of PVGIS, shading loss
   within 1.7 points of PVGIS on average at five mountain sites (`horizon.js`, #33).
+- **Terrain from the survey.** A least-squares plane through the surveyed heights gives the
+  site's slope, the direction it falls towards, its north–south and east–west grade and the
+  RMS of the heights about it (a "Terrain" card, the AI prompt and five GeoJSON fields).
+  Local metres from the WGS84 radii agree with pyproj's tangent plane to 2 mm on a 3 km site,
+  and the plane matches numpy; points along one line give no plane (#63).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:

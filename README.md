@@ -27,6 +27,7 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 - **Row-spacing / panel-count estimate** — suggested row spacing and how many rows fit the site, sized to avoid self-shading near the winter solstice
 - **Capacity of the whole site** — MWp (DC), MWh a year at P50 and P90, land per MWp and the whole site's investment, revenue and NPV, from the area, the row layout's ground coverage ratio and your module efficiency (see [Site capacity](#site-capacity-issue-45))
 - **Single-axis tracker alternative** — the yield of tracker rows on a horizontal north–south axis with backtracking at your ground coverage ratio, the gain over the best fixed array, and the tracker layout's MWp and MWh, from the same data; the ideal tracker is validated against PVGIS and the rotation against pvlib (see [Single-axis tracker](#single-axis-tracker-issue-49))
+- **Terrain as a whole** — the site's slope, the direction it falls towards, its north–south and east–west grade and how uneven the ground is, from a least-squares plane through the surveyed heights, checked against pyproj and numpy (see [Terrain from the survey](#terrain-from-the-survey-issue-63))
 - **Shading-risk & outlier flags** — heuristic per-point flags for a taller nearby neighbor on the sun side, or a statistically anomalous elevation reading
 - **Site charts** — rating distribution, elevation profile, per-point slope, azimuth compass rose, and monthly yield, all inline SVG
 
@@ -426,6 +427,22 @@ For example, at Warsaw (fixed P50 1043, tracker 1138 kWh/kWp at GCR 0.33) the br
 **With the actual extra investment** entered, the tracker gets its own column: LCOE, payback, NPV and IRR. The whole-site rows compare each layout at its own MWp on the same land, because a tracker layout fits a different capacity (GCR 0.33 against the fixed rows' GCR). So a tracker can win per kWp and lose per site, or the reverse.
 
 **How far to trust it.** The tracker yield is uncertain by several percent in either direction (the ideal tracker overrates the gain, and backtracking overrates the loss; see [Single-axis tracker](#single-axis-tracker-issue-49)). In the example, 1% more tracker yield raises the break-even by 12 per kWp, so ±5% moves it by about ±60, against 99. Read the break-even as an order of magnitude to compare with real quotes. There is no tracker P90, because its year-to-year series is not computed.
+
+## Terrain from the survey (issue #63)
+
+The `slope` and `azimuth` columns describe each point, and the CSV format leaves open whether they mean the ground or the panels. The survey's heights also describe the ground as a whole, and that matters for a solar site: an equator-facing slope lets rows stand closer, and tracker rows follow the north–south grade. So [`geometry.js`](geometry.js) fits a plane, z = a + b·east + c·north, through every point with an elevation, by least squares. The **Terrain** card shows:
+- **Slope:** the plane's steepest slope.
+- **Falls towards:** the compass direction downhill.
+- **Grade:** the rise per 100 m going north and going east.
+- **Fit:** the RMS of the heights about the plane. A large value means uneven ground or an elevation outlier; the plane does not down-weight the outliers that the per-point flags show.
+
+The heights come from the survey, not the DEM. The horizon's Copernicus GLO-90 cells are 90 m across, about the size of a whole site. The surveyed heights describe the ground far better and need no request.
+
+**Local metres:** east and north about the points' centroid, from the WGS84 radii of curvature, with the parallel's curvature to second order and longitudes wrapped at ±180°. Against pyproj's exact local tangent plane (geodetic → ECEF → east-north-up), a 3 × 3 km site at 60° N is off by at most 2 mm. The plane matches numpy's least squares at three test sites, one of them across the antimeridian. Both references are recorded by [`test/fixtures/make-terrain-plane.py`](test/fixtures/make-terrain-plane.py).
+
+**No plane:** fewer than three heights, or points along one line. A transect gives the slope along it only, so the spread across the line must be at least 5% of the spread along it, as a ratio of the principal standard deviations. The demo survey is such a transect, so its Terrain card stays empty.
+
+No pass/fail threshold is set (no "too steep" flag) without a source for the limit, and the plane is not yet used in the yield or the row layout. The GeoJSON site boundary carries `terrain_slope_deg`, `terrain_aspect_deg`, `terrain_grade_north_pct`, `terrain_grade_east_pct` and `terrain_rms_m`.
 
 ## Site capacity (issue #45)
 
