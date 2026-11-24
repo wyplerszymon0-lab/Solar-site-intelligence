@@ -139,9 +139,67 @@
     return Math.abs(sum) / 2;
   }
 
+  // Local east/north metres of lat/lon about (lat0, lon0) from the WGS84 radii of curvature
+  // at lat0 (meridian M, prime vertical N), the east scale at the point's own latitude and
+  // the curvature of the parallel to second order.
+  // Longitudes wrap at ±180°. Against pyproj's exact local tangent plane (issue #63), a
+  // 3 × 3 km site at 60° N is off by at most 2 mm.
+  const WGS84_A = 6378137, WGS84_E2 = 0.00669437999014;
+  function localMetres(lat, lon, lat0, lon0) {
+    const s = Math.sin(lat0 * DEG), w = 1 - WGS84_E2 * s * s;
+    const N = WGS84_A / Math.sqrt(w), M = WGS84_A * (1 - WGS84_E2) / (w * Math.sqrt(w));
+    const dLon = ((lon - lon0 + 540) % 360) - 180;
+    const l = dLon * DEG; // parallels curve towards the pole: the second-order term in north
+    return [l * N * Math.cos(lat * DEG), (lat - lat0) * DEG * M + N * s * Math.cos(lat0 * DEG) * l * l / 2];
+  }
+
+  // Terrain as a whole: the least-squares plane z = a + b·east + c·north through the points
+  // that have an elevation, in local metres about their centroid (issue #63). Returns
+  //   slopeDeg    the plane's steepest slope;
+  //   aspectDeg   the compass bearing it falls towards (null on a level plane);
+  //   gradeEastPct, gradeNorthPct  the rise per 100 m going east and going north;
+  //   rmsM        the root mean square of the residuals (how far the ground is from a plane);
+  //   n           the points used.
+  // null with fewer than three points, or when they lie on or near one line: a transect gives
+  // the slope along it only, so the spread across it must be at least 5 % of the spread along
+  // it (the ratio of the principal standard deviations). Every point counts equally:
+  // an elevation outlier (detectOutliers) tilts the plane and shows up in rmsM.
+  function terrainPlane(points) {
+    const pts = points.filter(p => Number.isFinite(p.elevation) && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+    if (pts.length < 3) return null;
+    const lat0 = pts.reduce((s, p) => s + p.lat, 0) / pts.length;
+    const lon0 = pts[0].lon + pts.reduce((s, p) => s + (((p.lon - pts[0].lon + 540) % 360) - 180), 0) / pts.length;
+    const xy = pts.map(p => localMetres(p.lat, p.lon, lat0, lon0));
+    const mx = xy.reduce((s, q) => s + q[0], 0) / pts.length, my = xy.reduce((s, q) => s + q[1], 0) / pts.length;
+    const mz = pts.reduce((s, p) => s + p.elevation, 0) / pts.length;
+    let sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0;
+    pts.forEach((p, i) => {
+      const x = xy[i][0] - mx, y = xy[i][1] - my, z = p.elevation - mz;
+      sxx += x * x; syy += y * y; sxy += x * y; sxz += x * z; syz += y * z;
+    });
+    const det = sxx * syy - sxy * sxy;
+    const half = (sxx + syy) / 2, root = Math.sqrt(((sxx - syy) / 2) ** 2 + sxy * sxy);
+    const minor = half - root, major = half + root; // principal spreads of the points
+    if (!(major > 0) || !(minor > 0.05 * 0.05 * major)) return null; // on or near one line
+    const b = (syy * sxz - sxy * syz) / det, c = (sxx * syz - sxy * sxz) / det;
+    let ss = 0;
+    pts.forEach((p, i) => {
+      const r = p.elevation - mz - b * (xy[i][0] - mx) - c * (xy[i][1] - my);
+      ss += r * r;
+    });
+    const grade = Math.hypot(b, c);
+    return {
+      slopeDeg: Math.atan(grade) / DEG,
+      aspectDeg: grade > 1e-9 ? (Math.atan2(-b, -c) / DEG + 360) % 360 : null,
+      gradeEastPct: b * 100, gradeNorthPct: c * 100,
+      rmsM: Math.sqrt(ss / pts.length), n: pts.length,
+    };
+  }
+
   const api = {
     SHADING_SCAN_CAP, optimalAzimuth, azimuthDiff, circularMeanDeg, solarRating,
     haversineM, bearingDeg, detectShading, detectOutliers, convexHull, polygonAreaM2,
+    localMetres, terrainPlane,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SiteGeometry = api;
