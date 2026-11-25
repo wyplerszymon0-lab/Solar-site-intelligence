@@ -49,6 +49,10 @@
           // Whole-site DC capacity and energy (issue #45); null where no row layout fits.
           capacity_kwp: stats.capacity ? Math.round(stats.capacity.kWp) : null,
           ground_coverage_ratio: stats.capacity ? Math.round(stats.capacity.gcr * 1000) / 1000 : null,
+          // Grade the rows follow (issue #65, positive = facing the equator; null = flat assumed) and
+          // the capacity the same site would have on flat ground.
+          row_grade_pct: stats.capacity && stats.capacity.gradePct != null ? round(stats.capacity.gradePct, 2) : null,
+          capacity_flat_kwp: stats.capacity && stats.capacity.flatKWp != null ? Math.round(stats.capacity.flatKWp) : null,
           energy_mwh_per_year_p50: stats.capacity ? Math.round(stats.capacity.mwhP50) : null,
           energy_mwh_per_year_p90: stats.capacity && stats.capacity.mwhP90 != null ? Math.round(stats.capacity.mwhP90) : null,
           // Ideal single-axis tracker, horizontal N–S axis (issue #49); null for the heuristic.

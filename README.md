@@ -442,7 +442,7 @@ The heights come from the survey, not the DEM. The horizon's Copernicus GLO-90 c
 
 **No plane:** fewer than three heights, or points along one line. A transect gives the slope along it only, so the spread across the line must be at least 5% of the spread along it, as a ratio of the principal standard deviations. The demo survey is such a transect, so its Terrain card stays empty.
 
-No pass/fail threshold is set (no "too steep" flag) without a source for the limit, and the plane is not yet used in the yield or the row layout. The GeoJSON site boundary carries `terrain_slope_deg`, `terrain_aspect_deg`, `terrain_grade_north_pct`, `terrain_grade_east_pct` and `terrain_rms_m`.
+No pass/fail threshold is set (no "too steep" flag) without a source for the limit, and the yield does not use the plane. The row layout does ([below](#rows-on-sloping-ground-issue-65)). The GeoJSON site boundary carries `terrain_slope_deg`, `terrain_aspect_deg`, `terrain_grade_north_pct`, `terrain_grade_east_pct` and `terrain_rms_m`.
 
 ## Site capacity (issue #45)
 
@@ -466,6 +466,30 @@ The tilt β is the same one the yield and the P50/P90 use: the surveyed slope, o
 The demo's 0.12 ha hold 177 kWp, 266 MWh a year at P50.
 
 **Limits.** The survey points' hull stands in for the parcel, which is usually larger. Shading between rows is avoided only at winter noon: mornings and evenings in winter, at a dense layout, lose some yield that is not modelled. The `slope` column is read as the panel tilt, so a sloping field is treated as panels at that slope. The capacity is DC: no inverter sizing, AC limit or grid connection. This card is for fixed-tilt rows. The [tracker card](#tracker-rows-and-backtracking-issue-53) gives the capacity of a tracker layout at its own GCR.
+
+### Rows on sloping ground (issue #65)
+
+Where the survey gives a [terrain plane](#terrain-from-the-survey-issue-63), the rows follow its north–south grade *g*, the rise per metre going away from the equator (positive on an equator-facing slope). One row does not shade the next at winter-solstice noon if the horizontal pitch is
+
+**h (sin β + cos β tan α) / (tan α + g)**
+
+with the tilt β from horizontal. At *g* = 0 this is the flat rule above. So the GCR scales by exactly 1 + *g* / tan α, which is a lot where the winter sun is low:
+
+| Example | g = −5% | flat | g = +5% |
+|---|---:|---:|---:|
+| Warsaw, 39° | 0.25 | 0.31 | 0.37 |
+| Lisbon, 35° | 0.48 | 0.52 | 0.57 |
+
+Tests compare the pitch with pvlib's `shaded_fraction1d` at 24 combinations of latitude, tilt and grade on both hemispheres. The reference ([`make-row-pitch-pvlib.py`](test/fixtures/make-row-pitch-pvlib.py)) does not use the formula: it searches for the smallest pitch that pvlib reports as unshaded. They agree to 10⁻⁶ of the row height.
+
+The row count, the capacity, the energy and the site's economics all use it. The capacity tooltip, the AI prompt and the GeoJSON (`row_grade_pct`, `capacity_flat_kwp`) give the flat-ground value next to it. Without a plane the ground counts as flat, as before.
+
+- **No layout** where the sun at that noon is not more than 3° up, or where tan α + *g* ≤ tan 3°: the slope hides the winter sun.
+- **GCR ≤ 1.** It is capped where the ground is about as steep as the panels. The cap also fixes steep panels near the equator, which gave a GCR above 1 on flat ground and an error instead of a capacity.
+- **The plane is an average.** On uneven ground (a large RMS on the Terrain card) single rows differ.
+- **The east–west grade does not enter:** rows run east–west and follow the ground along their length.
+- **The tracker card stays on flat ground.**
+- **A `slope` column that means the ground:** it is still read as the panel tilt, so such a file describes panels flush with the ground. On an equator-facing site the GCR then reaches its cap and the capacity is the most the ground could carry.
 
 ## A note on the heuristic estimates
 
