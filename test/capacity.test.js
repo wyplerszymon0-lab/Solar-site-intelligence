@@ -12,7 +12,7 @@ test('winter-solstice noon elevation is 90° − (|latitude| + 23.45°) on both 
 });
 
 test('GCR is the row height over the pitch of the no-shading spacing rule', () => {
-  // The app's estimateRowLayout: pitch = h (cos β + sin β / tan α), for any row height h.
+  // On flat ground: pitch = h (cos β + sin β / tan α), for any row height h.
   for (const [lat, tilt] of [[52.23, 39], [38.72, 35], [-26.2, 24], [60, 50]]) {
     const alpha = C.winterNoonElevation(lat) * Math.PI / 180, beta = tilt * Math.PI / 180;
     for (const h of [1.7, 4.5]) {
@@ -33,6 +33,35 @@ test('flat rows cover the ground; steeper rows and higher latitudes need more sp
   assert.ok(C.groundCoverageRatio(63, 30) > 0); // 3.55° still gives a (sparse) layout
   assert.throws(() => C.groundCoverageRatio(52, -5), /tilt/);
   assert.throws(() => C.groundCoverageRatio(NaN, 30), /tilt/);
+});
+
+test('the pitch on sloping ground is the smallest one pvlib finds unshaded', () => {
+  // pvlib's shaded_fraction1d with a cross-axis slope, by bisection (make-row-pitch-pvlib.py).
+  const F = require('./fixtures/row-pitch-pvlib.json');
+  assert.equal(F.cases.length, 24);
+  for (const c of F.cases) close(C.rowPitchFactor(c.lat, c.tilt, c.grade), c.pitch, 2e-6, JSON.stringify(c));
+});
+
+test('the grade scales the GCR by 1 + grade / tan(sun elevation)', () => {
+  const flat = C.groundCoverageRatio(52.23, 39), tan = Math.tan(14.32 * Math.PI / 180);
+  for (const g of [-0.05, 0.05, 0.1]) close(C.groundCoverageRatio(52.23, 39, g) / flat, 1 + g / tan, 1e-12);
+  close(C.groundCoverageRatio(52.23, 39, 0.05), 0.369, 0.001);
+  close(C.groundCoverageRatio(52.23, 39, -0.05), 0.248, 0.001);
+});
+
+test('limits on sloping ground: GCR at most 1, no rows where the slope hides the winter sun', () => {
+  assert.equal(C.groundCoverageRatio(38.72, 20, 0.5), 1); // ground steeper than the panels
+  assert.equal(C.groundCoverageRatio(52.23, 39, -0.25), null); // tan 14.32° = 0.255
+  assert.ok(C.groundCoverageRatio(52.23, 39, -0.2) > 0); // within 3°: sparse but possible
+  assert.equal(C.groundCoverageRatio(64, 30, 0.2), null); // polar stays polar
+  // Steep panels near the equator gave a GCR above 1 on flat ground, which siteCapacity refuses.
+  assert.equal(C.groundCoverageRatio(0, 60), 1);
+  assert.throws(() => C.groundCoverageRatio(52, 30, NaN), /grade/);
+});
+
+test('the grade is positive on an equator-facing slope on both hemispheres', () => {
+  close(C.gradeAwayFromEquator(52, 5), 0.05, 1e-12);   // rising north = facing south
+  close(C.gradeAwayFromEquator(-34, 5), -0.05, 1e-12); // rising north = facing south, away from the sun
 });
 
 test('capacity scales with area, usable share, GCR and module efficiency', () => {

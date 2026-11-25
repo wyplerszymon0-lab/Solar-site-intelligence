@@ -34,6 +34,10 @@ All notable changes to this project are documented here. The format follows
   RMS of the heights about it (a "Terrain" card, the AI prompt and five GeoJSON fields).
   Local metres from the WGS84 radii agree with pyproj's tangent plane to 2 mm on a 3 km site,
   and the plane matches numpy; points along one line give no plane (#63).
+- **Rows on sloping ground.** Row spacing, row count, capacity and site economics follow the
+  terrain plane's north–south grade: the GCR scales by 1 + grade / tan(winter noon sun),
+  about ±20% for ±5% in Warsaw. Checked against pvlib's shaded fraction at 24 cases. The GCR
+  is capped at 1, which also fixes an error for steep panels near the equator (#65).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:

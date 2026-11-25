@@ -57,6 +57,9 @@ const I18N = {
     'stat.capacity': 'Site capacity (DC) · energy per year (P50 / P90)',
     'stat.capacityTitle': '{area} ha × {share}% usable × ground coverage {gcr} (rows spaced for no shading at winter-solstice noon, {tilt}° tilt) × {eff}% module efficiency = {kwp} kWp, {haPerMWp} ha per MWp. Energy: {p50} / {p90} kWh per kWp a year (P50 / 1-year P90). DC at standard test conditions; the hull of the survey points stands in for the parcel.',
     'stat.capacityPolar': 'No row layout: the winter sun stays too low here.',
+    'stat.capacitySlope': 'No row layout: the ground falls away from the winter sun too steeply.',
+    'stat.capacityFlat': 'Flat ground assumed (no terrain plane).',
+    'stat.capacityGrade': 'Rows follow the surveyed ground, a north–south grade of {grade}% (positive: facing the equator). On flat ground: coverage {flatGcr}, {flatKwp} kWp.',
     'econ.site': 'Whole site, {mwp} MWp',
     'econ.investment': 'Investment',
     'model.opus': 'Opus 5.5 — highest quality, slower',
@@ -95,7 +98,7 @@ const I18N = {
     'stat.avgAz': 'Avg Azimuth °',
     'stat.avgElev': 'Avg Elevation m',
     'stat.terrain': 'Terrain, best-fit plane through the surveyed heights: slope · falls towards · grade N–S / E–W',
-    'stat.terrainTitle': 'Least-squares plane through the {n} points with an elevation, in local metres. The ground falls {slope}° towards {aspect}° (compass, 0° = north). Going north it rises {north}% (per 100 m), going east {east}%; a negative grade falls. The heights depart from the plane by {rms} m (RMS): a large value means uneven ground or an elevation outlier, and the plane is then only a rough summary. Not used in the yield or the row layout yet.',
+    'stat.terrainTitle': 'Least-squares plane through the {n} points with an elevation, in local metres. The ground falls {slope}° towards {aspect}° (compass, 0° = north). Going north it rises {north}% (per 100 m), going east {east}%; a negative grade falls. The heights depart from the plane by {rms} m (RMS): a large value means uneven ground or an elevation outlier, and the plane is then only a rough summary. The north–south grade sets the row spacing and the capacity of the fixed rows; the yield does not use the plane.',
     'stat.terrainNone': 'Needs at least three points with an elevation, spread out in both directions: points along one line (a transect) give the slope along it only.',
     'stat.area': 'Site Area est. m²',
     'stat.rows': 'Est. Panel Rows',
@@ -259,6 +262,9 @@ const I18N = {
     'stat.capacity': 'Moc terenu (DC) · energia rocznie (P50 / P90)',
     'stat.capacityTitle': '{area} ha × {share}% użytecznej części × pokrycie terenu {gcr} (rzędy bez zacienienia w południe przesilenia zimowego, nachylenie {tilt}°) × sprawność modułów {eff}% = {kwp} kWp, {haPerMWp} ha na MWp. Energia: {p50} / {p90} kWh na kWp rocznie (P50 / P90 dla 1 roku). Moc DC w warunkach STC; obrys punktów pomiaru zastępuje granice działki.',
     'stat.capacityPolar': 'Brak układu rzędów: zimowe słońce jest tu za nisko.',
+    'stat.capacitySlope': 'Brak układu rzędów: teren zbyt stromo opada w stronę przeciwną do zimowego słońca.',
+    'stat.capacityFlat': 'Założono płaski teren (brak płaszczyzny terenu).',
+    'stat.capacityGrade': 'Rzędy na zmierzonym terenie, spadek północ–południe {grade}% (dodatni: zbocze zwrócone ku równikowi). Na płaskim terenie: pokrycie {flatGcr}, {flatKwp} kWp.',
     'econ.site': 'Cały teren, {mwp} MWp',
     'econ.investment': 'Inwestycja',
     'model.opus': 'Opus 5.5 — najwyższa jakość, wolniejszy',
@@ -297,7 +303,7 @@ const I18N = {
     'stat.avgAz': 'Śr. azymut °',
     'stat.avgElev': 'Śr. wysokość m',
     'stat.terrain': 'Teren, płaszczyzna dopasowana do zmierzonych wysokości: spadek · kierunek spadku · spadek N–S / E–W',
-    'stat.terrainTitle': 'Płaszczyzna najmniejszych kwadratów przez {n} punktów z wysokością, w lokalnych metrach. Teren opada o {slope}° w kierunku {aspect}° (kompas, 0° = północ). Na północ wznosi się o {north}% (na 100 m), na wschód o {east}%; wartość ujemna oznacza spadek. Wysokości odbiegają od płaszczyzny o {rms} m (RMS): duża wartość oznacza nierówny teren albo odstającą wysokość i wtedy płaszczyzna jest tylko przybliżeniem. Na razie nie wpływa na uzysk ani układ rzędów.',
+    'stat.terrainTitle': 'Płaszczyzna najmniejszych kwadratów przez {n} punktów z wysokością, w lokalnych metrach. Teren opada o {slope}° w kierunku {aspect}° (kompas, 0° = północ). Na północ wznosi się o {north}% (na 100 m), na wschód o {east}%; wartość ujemna oznacza spadek. Wysokości odbiegają od płaszczyzny o {rms} m (RMS): duża wartość oznacza nierówny teren albo odstającą wysokość i wtedy płaszczyzna jest tylko przybliżeniem. Spadek północ–południe wpływa na odstępy rzędów i moc układu stałego; uzysk nie korzysta z płaszczyzny.',
     'stat.terrainNone': 'Potrzeba co najmniej trzech punktów z wysokością, rozłożonych w obu kierunkach: punkty na jednej linii (przekrój) dają spadek tylko wzdłuż niej.',
     'stat.area': 'Szac. powierzchnia m²',
     'stat.rows': 'Szac. liczba rzędów',
@@ -750,19 +756,6 @@ function seasonalYieldFactors(lat, tiltDeg) {
   return factors.map(f => f / sum);
 }
 
-// Row spacing to avoid inter-row self-shading at solar noon near the winter
-// solstice (standard rule-of-thumb design formula). Rough estimate — assumes
-// a flat site and a fixed panel row height.
-function estimateRowLayout(lat, tiltDeg) {
-  const winterDecl = lat >= 0 ? -23.45 : 23.45;
-  const minNoonElevation = 90 - Math.abs(lat - winterDecl);
-  if (minNoonElevation <= 3) return { spacing: null, rows: null };
-  const tiltRad = tiltDeg * Math.PI / 180;
-  const elevRad = minNoonElevation * Math.PI / 180;
-  const spacing = PANEL_ROW_HEIGHT_M * (Math.cos(tiltRad) + Math.sin(tiltRad) / Math.tan(elevRad));
-  return { spacing, minNoonElevation };
-}
-
 // ─── Satellite irradiance (NASA POWER) ─────────────────────
 // Two requests per site centre, each cached in memory and in this browser (the
 // data changes only yearly): the monthly climatology (~40 numbers) that drives
@@ -1007,23 +1000,31 @@ function computeSiteStats(data) {
   // Rows, capacity, yield and P50/P90 all describe one array: the surveyed tilt, or the
   // optimal one where the file has no slope (issue #45; rows used the optimal tilt before).
   const arrayTilt = avgSlope ?? optTilt;
-  const layout = estimateRowLayout(centerLat, arrayTilt);
+  const rowTilt = Math.min(Math.max(arrayTilt, 0), 90);
+  // The ground as a plane (issue #63), null if undefined: its north–south grade sets how
+  // close the rows can stand (issue #65). Without a plane the ground counts as flat.
+  const terrain = terrainPlane(data);
+  const rowGrade = terrain ? SiteCapacity.gradeAwayFromEquator(centerLat, terrain.gradeNorthPct) : 0;
+  const gcr = SiteCapacity.groundCoverageRatio(centerLat, rowTilt, rowGrade);
+  const flatGcr = SiteCapacity.groundCoverageRatio(centerLat, rowTilt);
+  const spacing = gcr ? PANEL_ROW_HEIGHT_M / gcr : null;
   let rows = null;
-  if (layout.spacing) {
+  if (spacing) {
     const lats = data.map(p => p.lat);
     const depthM = (Math.max(...lats) - Math.min(...lats)) * 111000;
-    rows = Math.max(1, Math.floor(depthM / layout.spacing) + 1);
+    rows = Math.max(1, Math.floor(depthM / spacing) + 1);
   }
 
   // Capacity of the whole site (issue #45): area × usable share × GCR × module efficiency.
   let capacity = null;
-  const gcr = SiteCapacity.groundCoverageRatio(centerLat, Math.min(Math.max(arrayTilt, 0), 90));
   if (gcr && area > 0) {
     const moduleEfficiency = currentModuleEfficiency(), usableShare = currentUsableShare();
     const c = SiteCapacity.siteCapacity({ areaM2: area, gcr, moduleEfficiency, usableShare });
     const p50PerKwp = variability ? variability.p50 : yieldEst;
     capacity = {
       kWp: c.kWp, haPerMWp: c.haPerMWp, gcr, tilt: arrayTilt, moduleEfficiency, usableShare,
+      // Same site on flat ground, for comparison; the grade is null without a terrain plane.
+      gradePct: terrain ? rowGrade * 100 : null, flatGcr, flatKWp: c.kWp * flatGcr / gcr,
       p50PerKwp, p90PerKwp: variability ? variability.p90Year : null,
       mwhP50: c.kWp * p50PerKwp / 1000,
       mwhP90: variability ? c.kWp * variability.p90Year / 1000 : null,
@@ -1040,14 +1041,15 @@ function computeSiteStats(data) {
   const benchmarkPct = Math.round((yieldEst - optimalYield) / optimalYield * 100);
   const shadingFlags = detectShading(data, centerLat);
   const outlierFlags = detectOutliers(data);
-  const terrain = terrainPlane(data); // the site's ground as a plane (issue #63), null if undefined
 
   const stats = {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
     systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, climPeriod, variability, horizon, horizonLossPct,
     facing, facingAz, hull, area, capacity, tracker,
-    spacing: layout.spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal, terrain,
+    spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal, terrain,
+    // No rows because of the slope alone: flat ground at this latitude would take them.
+    noRowsFromSlope: !gcr && !!flatGcr,
   };
   stats.economics = economicsFor(stats);
   return stats;
@@ -1519,7 +1521,7 @@ function renderStats(data, stats) {
 
   const rowsCard = document.getElementById('stat-rows-card');
   rowsCard.title = stats.spacing
-    ? `Row spacing ~${stats.spacing.toFixed(1)} m (avoids self-shading near winter-solstice noon; assumes ${PANEL_ROW_HEIGHT_M} m panel height) — rough estimate`
+    ? `Row spacing ~${stats.spacing.toFixed(1)} m (avoids self-shading near winter-solstice noon${stats.terrain ? ', on the surveyed north–south grade' : ', on flat ground'}; assumes ${PANEL_ROW_HEIGHT_M} m panel height) — rough estimate`
     : '';
 
   const cap = stats.capacity;
@@ -1533,8 +1535,11 @@ function renderStats(data, stats) {
       area: fmt1(stats.area / 10000), share: Math.round(cap.usableShare * 100), gcr: cap.gcr.toFixed(2),
       tilt: cap.tilt.toFixed(0), eff: fmt1(cap.moduleEfficiency * 100), kwp: Math.round(cap.kWp).toLocaleString(),
       haPerMWp: cap.haPerMWp.toFixed(2), p50: cap.p50PerKwp.toLocaleString(), p90: cap.p90PerKwp != null ? cap.p90PerKwp.toLocaleString() : '—',
-    })
-    : (stats.area > 0 ? t('stat.capacityPolar') : '');
+    }) + ' ' + (cap.gradePct == null ? t('stat.capacityFlat') : t('stat.capacityGrade', {
+      grade: (cap.gradePct >= 0 ? '+' : '−') + Math.abs(cap.gradePct).toFixed(1),
+      flatGcr: cap.flatGcr.toFixed(2), flatKwp: Math.round(cap.flatKWp).toLocaleString(),
+    }))
+    : (stats.area > 0 ? t(stats.noRowsFromSlope ? 'stat.capacitySlope' : 'stat.capacityPolar') : '');
 
   const benchEl = document.getElementById('stat-benchmark');
   benchEl.textContent = (stats.benchmarkPct > 0 ? '+' : '') + stats.benchmarkPct + '%';
@@ -1731,8 +1736,12 @@ function buildInitialPrompt(stats) {
         `shading at winter-solstice noon) × ${(stats.capacity.moduleEfficiency * 100).toFixed(1)}% module efficiency; ` +
         `${stats.capacity.haPerMWp.toFixed(2)} ha/MWp; ${Math.round(stats.capacity.mwhP50)} MWh/yr at P50` +
         (stats.capacity.mwhP90 != null ? `, ${Math.round(stats.capacity.mwhP90)} at the 1-year P90` : '') +
+        (stats.capacity.gradePct != null
+          ? `. Rows follow the surveyed ground (grade ${stats.capacity.gradePct.toFixed(1)}%, positive = facing the equator); on flat ground ` +
+            `${(stats.capacity.flatKWp / 1000).toFixed(2)} MWp at ground coverage ratio ${stats.capacity.flatGcr.toFixed(2)}`
+          : `. Flat ground assumed`) +
         `. The site area is the convex hull of the survey points, not the parcel boundary.\n\n`
-      : `SITE CAPACITY: not estimated.\n\n`) +
+      : `SITE CAPACITY: not estimated${stats.noRowsFromSlope ? ' (the ground falls away from the winter sun too steeply for rows)' : ''}.\n\n`) +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');
 }

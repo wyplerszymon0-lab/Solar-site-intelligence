@@ -40,6 +40,8 @@ test('site boundary carries annual and monthly yield with its source', () => {
     system_loss_pct: 14,
     capacity_kwp: null,
     ground_coverage_ratio: null,
+    row_grade_pct: null,
+    capacity_flat_kwp: null,
     energy_mwh_per_year_p50: null,
     energy_mwh_per_year_p90: null,
     tracker_yield_kwh_per_kwp: null,
@@ -126,6 +128,10 @@ test("the whole site's capacity and energy are exported, rounded", () => {
     [66543, 0.308, 69403, 64211]);
   const noP90 = buildGeoJSON(data, stats({ capacity: { ...capacity, mwhP90: null } })).features.at(-1).properties;
   assert.equal(noP90.energy_mwh_per_year_p90, null);
+  const sloping = buildGeoJSON(data, stats({ capacity: { ...capacity, gradePct: 5.0312, flatKWp: 55432.1 } })).features.at(-1).properties;
+  assert.deepEqual([sloping.row_grade_pct, sloping.capacity_flat_kwp], [5.03, 55432]);
+  const flat = buildGeoJSON(data, stats({ capacity: { ...capacity, gradePct: null, flatKWp: 66543.2 } })).features.at(-1).properties;
+  assert.deepEqual([flat.row_grade_pct, flat.capacity_flat_kwp], [null, 66543]);
 });
 
 test('the tracker alternative is exported only next to satellite yield', () => {
