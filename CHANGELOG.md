@@ -38,6 +38,11 @@ All notable changes to this project are documented here. The format follows
   terrain plane's north–south grade: the GCR scales by 1 + grade / tan(winter noon sun),
   about ±20% for ±5% in Warsaw. Checked against pvlib's shaded fraction at 24 cases. The GCR
   is capped at 1, which also fixes an error for steep panels near the equator (#65).
+- **Bifacial modules.** A bifaciality setting adds the rear side of the fixed rows: a 2-D
+  infinite-sheds view-factor model (sky through the gap, the partly shaded ground, low sun
+  from behind) over the mean day, within 0.03% of pvlib's rear irradiance at 7 sites, 12
+  months and 4 row geometries. Shown on a Bifacial card, in the AI prompt and the GeoJSON;
+  capacity energy, economics and P90 stay monofacial (#67).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:

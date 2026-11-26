@@ -29,6 +29,7 @@ const MODULE_EFF_STORAGE  = 'solarSite.moduleEfficiencyPct';
 const USABLE_SHARE_STORAGE = 'solarSite.usableSharePct';
 const TRACKER_GCR_STORAGE = 'solarSite.trackerGcr';
 const TRACKER_LIMIT_STORAGE = 'solarSite.trackerLimitDeg';
+const BIFACIALITY_STORAGE = 'solarSite.bifaciality';
 const CRS_STORAGE         = 'solarSite.crs';
 const ECONOMICS_STORAGE   = 'solarSite.economics';
 const HISTORY_LIMIT      = 15;
@@ -110,6 +111,11 @@ const I18N = {
     'stat.trackerTitle': 'Tracker rows on a horizontal north–south axis at ground coverage {gcr}, {limit}, on flat ground. At low sun the rows turn back towards flat so they do not shade each other (backtracking): {loss}% against an ideal tracker without neighbours ({ideal} kWh/kWp). Compared with a fixed array at the optimal {tilt}° tilt: {fixed} kWh/kWp. Capacity: {area} ha × {share}% usable × {gcr} × {eff}% module efficiency = {kwp} kWp, {haPerMWp} ha per MWp. Against PVGIS (ideal tracker, seven sites) the model is {unc}% off (RMS) and overrates the gain by about 3 points, and too much beam at low sun also overstates the backtracking loss: read the yield as uncertain in both directions by several percent. Economics and P90 above are for the fixed array.',
     'stat.trackerNoLimit': 'no rotation limit',
     'stat.trackerLimit': 'rotation limit ±{limit}°',
+    'cfg.bifaciality': 'BIFACIALITY (BLANK = MONOFACIAL)',
+    'cfg.bifacialNote': 'For the bifacial card: the rear\'s efficiency relative to the front, from the module\'s datasheet. The rows are the fixed rows of the capacity card, at its ground coverage ratio.',
+    'stat.bifacial': 'Bifacial modules, fixed rows: kWh/kWp per year · gain from the rear side',
+    'stat.bifacialOff': 'Monofacial modules. Enter the bifaciality in Configuration to see what the rear side adds.',
+    'stat.bifacialTitle': 'The rear of the fixed rows receives {rear} kWh/m² a year, {ratio}% of the front: sky light between the rows, light reflected by the ground (albedo {albedo}, partly shaded by the rows) and low sun from behind. Yield = front + {bf} bifaciality × (1 − {loss}% for the racking) × rear. Rows at ground coverage {gcr}, {tilt}° tilt, on flat ground. 2-D view-factor model of long rows (infinite sheds), within 0.1% of pvlib\'s rear irradiance; like pvlib\'s, it averages the ground\'s brightness between the rows, so the rows\' height does not enter. Capacity, economics and P90 above stay monofacial.',
     'cfg.trackerGcr': 'TRACKER GROUND COVERAGE RATIO',
     'cfg.trackerLimit': 'TRACKER ROTATION LIMIT (°, BLANK = NONE)',
     'cfg.trackerNote': 'For the single-axis tracker card: module width over row pitch, typically 0.25–0.40 for tracking plants (Bolinger & Bolinger 2022). Denser rows backtrack more. The limit is the tracker\'s mechanical stop from its datasheet.',
@@ -315,6 +321,11 @@ const I18N = {
     'stat.trackerTitle': 'Rzędy trackerów na poziomej osi północ–południe przy pokryciu terenu {gcr}, {limit}, na płaskim terenie. Przy niskim słońcu rzędy wracają w stronę poziomu, żeby się nie zacieniać (backtracking): {loss}% względem idealnego trackera bez sąsiadów ({ideal} kWh/kWp). Porównanie z układem stałym o optymalnym nachyleniu {tilt}°: {fixed} kWh/kWp. Moc: {area} ha × {share}% użytecznej części × {gcr} × sprawność modułów {eff}% = {kwp} kWp, {haPerMWp} ha na MWp. Względem PVGIS (idealny tracker, siedem miejsc) model myli się o {unc}% (RMS) i zawyża zysk o około 3 punkty, a za dużo promieniowania bezpośredniego przy niskim słońcu zawyża też stratę z backtrackingu: uzysk jest niepewny o kilka procent w obie strony. Ekonomia i P90 powyżej dotyczą układu stałego.',
     'stat.trackerNoLimit': 'bez limitu obrotu',
     'stat.trackerLimit': 'limit obrotu ±{limit}°',
+    'cfg.bifaciality': 'BIFACJALNOŚĆ (PUSTE = MODUŁY JEDNOSTRONNE)',
+    'cfg.bifacialNote': 'Do karty modułów bifacjalnych: sprawność tylnej strony względem przedniej, z karty katalogowej modułu. Rzędy to rzędy stałe z karty mocy, przy jej pokryciu terenu.',
+    'stat.bifacial': 'Moduły bifacjalne, rzędy stałe: kWh/kWp rocznie · zysk z tylnej strony',
+    'stat.bifacialOff': 'Moduły jednostronne. Wpisz bifacjalność w konfiguracji, żeby zobaczyć, co dodaje tylna strona.',
+    'stat.bifacialTitle': 'Tył rzędów stałych dostaje {rear} kWh/m² rocznie, {ratio}% tego co przód: światło nieba między rzędami, światło odbite od gruntu (albedo {albedo}, częściowo w cieniu rzędów) i niskie słońce od tyłu. Uzysk = przód + bifacjalność {bf} × (1 − {loss}% na konstrukcję) × tył. Rzędy przy pokryciu terenu {gcr}, nachyleniu {tilt}°, na płaskim gruncie. Dwuwymiarowy model współczynników widoku długich rzędów (infinite sheds), w granicach 0,1% od pvlib dla promieniowania na tył; jak w pvlib jasność gruntu jest uśredniona między rzędami, więc wysokość rzędów nie ma wpływu. Moc, ekonomia i P90 powyżej dotyczą modułów jednostronnych.',
     'cfg.trackerGcr': 'POKRYCIE TERENU PRZEZ TRACKERY (GCR)',
     'cfg.trackerLimit': 'LIMIT OBROTU TRACKERA (°, PUSTE = BRAK)',
     'cfg.trackerNote': 'Do karty trackera jednoosiowego: szerokość modułu przez rozstaw rzędów, zwykle 0,25–0,40 w farmach z trackerami (Bolinger & Bolinger 2022). Gęstsze rzędy częściej robią backtracking. Limit to mechaniczny zakres obrotu z karty katalogowej trackera.',
@@ -607,8 +618,13 @@ function currentTrackerGcr() {
 function currentTrackerLimit() {
   return SiteCapacity.trackerLimitSetting(document.getElementById('tracker-limit').value);
 }
+// Bifacial setting (issue #67): a factor, blank = monofacial.
+function currentBifaciality() {
+  return SiteCapacity.bifacialitySetting(document.getElementById('bifaciality').value);
+}
 [['tracker-gcr', TRACKER_GCR_STORAGE, SiteCapacity.trackerGcrSetting],
- ['tracker-limit', TRACKER_LIMIT_STORAGE, SiteCapacity.trackerLimitSetting]].forEach(([id, key, parse]) => {
+ ['tracker-limit', TRACKER_LIMIT_STORAGE, SiteCapacity.trackerLimitSetting],
+ ['bifaciality', BIFACIALITY_STORAGE, SiteCapacity.bifacialitySetting]].forEach(([id, key, parse]) => {
   const input = document.getElementById(id);
   const show = (v) => (v == null ? '' : String(Math.round(v * 100) / 100));
   try {
@@ -1038,6 +1054,25 @@ function computeSiteStats(data) {
     tracker.capacity = { kWp: c.kWp, haPerMWp: c.haPerMWp, moduleEfficiency, usableShare, mwh: c.kWp * tracker.yield / 1000 };
   }
 
+  // Bifacial fixed rows (issue #67): the same array, layout and data, plus the rear side.
+  // Only next to the satellite yield and where rows fit. The rows' centre height (in slant
+  // widths) only has to clear the ground: the model averages the ground between the rows, and
+  // that average does not depend on the height (README), so 1 m under the lowest edge is used.
+  let bifacial = null;
+  const bifaciality = currentBifaciality();
+  if (bifaciality != null && yieldSource === 'satellite' && gcr) {
+    const bifacialHeight = (1 + PANEL_ROW_HEIGHT_M / 2 * Math.sin(rowTilt * Math.PI / 180)) / PANEL_ROW_HEIGHT_M;
+    const opts = { ...modelOptions, bifaciality, bifacialGcr: gcr, bifacialHeight };
+    const front = SolarModel.monthlyYield(clim, centerLat, rowTilt, avgAz ?? facingAz, modelOptions);
+    const both = SolarModel.monthlyYield(clim, centerLat, rowTilt, avgAz ?? facingAz, opts);
+    bifacial = {
+      yield: Math.round(both.annual), gainPct: Math.round((both.annual / front.annual - 1) * 1000) / 10,
+      rear: Math.round(both.rearAnnual), ratioPct: Math.round(both.rearAnnual / front.poaAnnual * 1000) / 10,
+      bifaciality, gcr, tilt: rowTilt, albedo: SolarModel.DEFAULTS.groundAlbedo,
+      rearLossPct: SolarModel.DEFAULTS.rearLoss * 100,
+    };
+  }
+
   const benchmarkPct = Math.round((yieldEst - optimalYield) / optimalYield * 100);
   const shadingFlags = detectShading(data, centerLat);
   const outlierFlags = detectOutliers(data);
@@ -1046,7 +1081,7 @@ function computeSiteStats(data) {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
     systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, climPeriod, variability, horizon, horizonLossPct,
-    facing, facingAz, hull, area, capacity, tracker,
+    facing, facingAz, hull, area, capacity, tracker, bifacial,
     spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal, terrain,
     // No rows because of the slope alone: flat ground at this latitude would take them.
     noRowsFromSlope: !gcr && !!flatGcr,
@@ -1501,6 +1536,17 @@ function renderStats(data, stats) {
     })
     : '';
 
+  const bf = stats.bifacial;
+  document.getElementById('stat-bifacial').textContent = bf
+    ? `${bf.yield.toLocaleString()} · ${bf.gainPct >= 0 ? '+' : ''}${bf.gainPct.toLocaleString()}%`
+    : '—';
+  document.getElementById('stat-bifacial-card').title = bf
+    ? t('stat.bifacialTitle', {
+      rear: bf.rear.toLocaleString(), ratio: bf.ratioPct.toLocaleString(), albedo: bf.albedo, bf: bf.bifaciality,
+      loss: bf.rearLossPct, gcr: bf.gcr.toFixed(2), tilt: bf.tilt.toFixed(0),
+    })
+    : t('stat.bifacialOff');
+
   const tr = stats.tracker;
   const trCap = tr && tr.capacity;
   document.getElementById('stat-tracker').textContent = tr
@@ -1742,6 +1788,13 @@ function buildInitialPrompt(stats) {
           : `. Flat ground assumed`) +
         `. The site area is the convex hull of the survey points, not the parcel boundary.\n\n`
       : `SITE CAPACITY: not estimated${stats.noRowsFromSlope ? ' (the ground falls away from the winter sun too steeply for rows)' : ''}.\n\n`) +
+    (stats.bifacial
+      ? `BIFACIAL MODULES (fixed rows, bifaciality ${stats.bifacial.bifaciality}): ${stats.bifacial.yield} kWh/kWp/yr, ` +
+        `${stats.bifacial.gainPct}% over monofacial at the same orientation; the rear receives ${stats.bifacial.rear} kWh/m²/yr ` +
+        `(${stats.bifacial.ratioPct}% of the front) at ground coverage ratio ${stats.bifacial.gcr.toFixed(2)} on flat ground, ` +
+        `albedo ${stats.bifacial.albedo} (assumed); 2-D view-factor model with the ground averaged between rows, row height not modelled. Capacity, energy, economics ` +
+        `and P90 above are monofacial.\n\n`
+      : '') +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');
 }

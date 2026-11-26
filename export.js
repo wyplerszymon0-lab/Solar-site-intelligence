@@ -63,6 +63,10 @@
           tracker_rotation_limit_deg: stats.yieldSource === 'satellite' && stats.tracker ? stats.tracker.limit : null,
           tracker_capacity_kwp: stats.yieldSource === 'satellite' && stats.tracker?.capacity ? Math.round(stats.tracker.capacity.kWp) : null,
           tracker_energy_mwh_per_year: stats.yieldSource === 'satellite' && stats.tracker?.capacity ? Math.round(stats.tracker.capacity.mwh) : null,
+          // Bifacial fixed rows (issue #67); null when monofacial.
+          bifacial_yield_kwh_per_kwp: stats.bifacial ? stats.bifacial.yield : null,
+          bifacial_gain_pct: stats.bifacial ? stats.bifacial.gainPct : null,
+          bifaciality: stats.bifacial ? stats.bifacial.bifaciality : null,
           // The ground as a least-squares plane through the surveyed heights (issue #63); null if undefined.
           terrain_slope_deg: stats.terrain ? round(stats.terrain.slopeDeg, 2) : null,
           terrain_aspect_deg: stats.terrain && stats.terrain.aspectDeg != null ? round(stats.terrain.aspectDeg, 1) : null,

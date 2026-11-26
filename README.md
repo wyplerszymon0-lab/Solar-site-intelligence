@@ -27,6 +27,7 @@ Upload your geodetic CSV, visualize measurement points on an interactive map, an
 - **Row-spacing / panel-count estimate** — suggested row spacing and how many rows fit the site, sized to avoid self-shading near the winter solstice
 - **Capacity of the whole site** — MWp (DC), MWh a year at P50 and P90, land per MWp and the whole site's investment, revenue and NPV, from the area, the row layout's ground coverage ratio and your module efficiency (see [Site capacity](#site-capacity-issue-45))
 - **Single-axis tracker alternative** — the yield of tracker rows on a horizontal north–south axis with backtracking at your ground coverage ratio, the gain over the best fixed array, and the tracker layout's MWp and MWh, from the same data; the ideal tracker is validated against PVGIS and the rotation against pvlib (see [Single-axis tracker](#single-axis-tracker-issue-49))
+- **Bifacial modules** — what the rear side of fixed rows adds, from a 2-D view-factor model of the rows (infinite sheds) that matches pvlib's rear irradiance within 0.03% (see [Bifacial modules](#bifacial-modules-issue-67))
 - **Terrain as a whole** — the site's slope, the direction it falls towards, its north–south and east–west grade and how uneven the ground is, from a least-squares plane through the surveyed heights, checked against pyproj and numpy (see [Terrain from the survey](#terrain-from-the-survey-issue-63))
 - **Shading-risk & outlier flags** — heuristic per-point flags for a taller nearby neighbor on the sun side, or a statistically anomalous elevation reading
 - **Site charts** — rating distribution, elevation profile, per-point slope, azimuth compass rose, and monthly yield, all inline SVG
@@ -490,6 +491,32 @@ The row count, the capacity, the energy and the site's economics all use it. The
 - **The east–west grade does not enter:** rows run east–west and follow the ground along their length.
 - **The tracker card stays on flat ground.**
 - **A `slope` column that means the ground:** it is still read as the panel tilt, so such a file describes panels flush with the ground. On an equator-facing site the GCR then reaches its cap and the capacity is the most the ground could carry.
+
+## Bifacial modules (issue #67)
+
+Enter the modules' **bifaciality**, the rear's efficiency relative to the front from the datasheet, in Configuration. The **Bifacial** card then shows the fixed rows' yield with the rear side and the gain over monofacial modules. The rows are those of the capacity card: same tilt, azimuth and ground coverage ratio.
+
+The rear's irradiation comes from a 2-D model of long, evenly spaced rows on flat ground, the "infinite sheds" of Mikofski et al. (2019) that pvlib implements ([`solar-model.js`](solar-model.js), `rearDayIrradiation`). It is spread over the mean day like the front side. Moment by moment, the rear receives three parts:
+- **Sky:** the isotropic sky through the gap between its row and the row behind. In 2-D the view factor is closed-form, from Hottel's crossed strings.
+- **Ground:** light reflected from the ground between the rows. The ground has a sunlit share, the pitch minus the rows' shadows, and its own view of the sky past the rows. That view is integrated numerically over the pitch, from the angles the rows hide.
+- **Beam from behind:** when the sun is behind the rows, early and late in summer, minus the part of the rear that the row behind shades.
+
+With the Hay–Davies sky, the circumsolar share counts as beam. Yield = front + bifaciality × (1 − 2% for the racking behind the modules, pvlib's default) × rear, with the same losses and temperature as the front.
+
+**Checked against pvlib 0.16.1** `bifacial.infinite_sheds.get_irradiance_poa`, given the app's own mean-day moments as input ([`tools/bifacial-moments.mjs`](tools/bifacial-moments.mjs), [`make-bifacial-pvlib.py`](test/fixtures/make-bifacial-pvlib.py)). Over 7 sites × 12 months × 4 row geometries (GCR 0.25–0.6, albedo 0.2–0.5), each geometry's yearly rear irradiation agrees within 0.03%, and so do the sky, ground and beam parts separately. pvlib computes its view factors with its own exact integrals, so the check covers the geometry, not just the arithmetic.
+
+| Gain at bifaciality 0.8, albedo 0.2 | Tilt | GCR | Gain |
+|---|---:|---:|---:|
+| Warsaw | 39° | 0.31 | +10.3% |
+| Lisbon | 35° | 0.52 | +6.2% |
+| Cairo | 27° | 0.66 | +4.5% |
+
+**Limits.**
+- **The ground is averaged.** Like pvlib's, the model takes the ground's brightness as uniform across the pitch. In an infinite array, the average sky view of the ground then does not depend on the rows' height: pvlib gives the same value to 10⁻¹² for heights from 0.4 to 4 row widths. So the height does not enter the model, although real rows mounted higher get a more evenly lit ground under them. There is therefore no height setting.
+- **Not modelled:** light reflected by other rows, the rear's glass reflection loss, row ends, trackers and sloping ground.
+- **Assumed albedo:** the app's 0.2.
+- **No field data.** The check is against pvlib only, so it shows that the geometry is computed right, not that the gain is what a real plant measures.
+- **Monofacial elsewhere:** the capacity card's energy, the economics and the P90 stay monofacial.
 
 ## A note on the heuristic estimates
 

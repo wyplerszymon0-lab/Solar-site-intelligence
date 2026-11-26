@@ -130,6 +130,13 @@
           For the single-axis tracker card: module width over row pitch, typically 0.25–0.40 for tracking plants (Bolinger &amp; Bolinger 2022). Denser rows backtrack more. The limit is the tracker's mechanical stop from its datasheet.
         </div>
       </div>
+      <div class="input-group">
+        <label class="input-label" for="bifaciality" data-i18n="cfg.bifaciality">BIFACIALITY (BLANK = MONOFACIAL)</label>
+        <input type="number" id="bifaciality" min="0.1" max="1" step="0.01" value="" inputmode="decimal">
+        <div class="key-note" data-i18n="cfg.bifacialNote">
+          For the bifacial card: the rear's efficiency relative to the front, from the module's datasheet. The rows are the fixed rows of the capacity card, at its ground coverage ratio.
+        </div>
+      </div>
     </div>
 
     <!-- DATA INPUT -->
@@ -276,6 +283,10 @@
         <div class="stat-card stat-card-wide" id="stat-p90-card" title="">
           <div class="stat-value" id="stat-p90">—</div>
           <div class="stat-label" id="stat-p90-label" data-i18n="stat.p90">P50 / P90, kWh/kWp per year</div>
+        </div>
+        <div class="stat-card stat-card-wide" id="stat-bifacial-card" title="">
+          <div class="stat-value" id="stat-bifacial">—</div>
+          <div class="stat-label" data-i18n="stat.bifacial">Bifacial modules, fixed rows: kWh/kWp per year · gain from the rear side</div>
         </div>
         <div class="stat-card stat-card-wide" id="stat-tracker-card" title="">
           <div class="stat-value" id="stat-tracker">—</div>

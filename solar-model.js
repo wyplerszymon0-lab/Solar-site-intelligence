@@ -31,6 +31,12 @@
     mounting: 'fixed',       // or 'single-axis': horizontal north–south tracker; tilt and azimuth are then ignored
     trackerLimit: null,      // largest tracker rotation from flat, degrees; null = none, as in PVGIS
     trackerGcr: null,        // tracker ground coverage ratio for backtracking; null = ideal tracker, no neighbours
+    // Bifacial fixed rows (issue #67): null = monofacial. The rear adds bifaciality × (1 − rearLoss)
+    // × its irradiance; rearLoss is pvlib's default allowance for the racking behind the modules.
+    bifaciality: null,
+    bifacialGcr: null,       // the rows' ground coverage ratio
+    bifacialHeight: null,    // height of the rows' centre above the ground, in slant widths (must clear it)
+    rearLoss: 0.02,
   };
   const SKY_MODELS = ['isotropic', 'hay-davies'];
   const BEAM_PROFILES = ['constant-clearness', 'collares-pereira-rabl'];
@@ -249,12 +255,126 @@
   //
   // options.mounting 'single-axis' models a horizontal north–south tracker instead
   // (trackerDayFactors); tilt and compassAz are then ignored.
+  // ─── Bifacial rows: the rear side (issue #67) ───
+  // Fixed rows, infinitely long, on flat ground, in the 2-D cross-section across them
+  // ("infinite sheds", Mikofski et al. 2019; the model of pvlib.bifacial.infinite_sheds,
+  // which the tests compare with). Lengths are in units of the row's slant width L: the
+  // pitch is a = 1/GCR, the row's centre is h above the ground.
+  //
+  // The rear of a row sees three things: the sky through the gap above, up to the top
+  // edge of the row behind; the ground through the gap below, down to that row's lower
+  // edge; and that row's front in between. Each gap and the row form a triangle with one
+  // shared edge, so Hottel's crossed strings give the view factors in closed form:
+  // (1 + a − third side) / 2, the third side √(a² ± 2a cos β + 1).
+  function rearViewFactors(tilt, gcr) {
+    const a = 1 / gcr, c = Math.cos(tilt * DEG);
+    return {
+      sky: (1 + a - Math.sqrt(a * a + 2 * a * c + 1)) / 2,
+      ground: (1 + a - Math.sqrt(a * a - 2 * a * c + 1)) / 2,
+    };
+  }
+
+  // The sky seen from the ground between two rows, averaged over the pitch: from each
+  // point, the rows hide angular intervals of the sky (to their two edges), and the view
+  // factor of the rest is the sum of ½(cos θ₁ − cos θ₂) over the open intervals. Rows are
+  // counted to 200 pitches either side, where they are well under 1° high. Averaged over the
+  // pitch of infinite rows, this does not depend on the height (pvlib's exact integral gives
+  // the same to 10⁻¹²): the height only has to clear the ground. The rows cut off beyond 200
+  // pitches make it drift by up to 5·10⁻⁵ for rows 4 slant widths up.
+  const groundSkyCache = new Map();
+  function groundSkyView(tilt, gcr, height) {
+    const key = `${tilt}|${gcr}|${height}`;
+    if (groundSkyCache.has(key)) return groundSkyCache.get(key);
+    const a = 1 / gcr, cx = Math.cos(tilt * DEG) / 2, sy = Math.sin(tilt * DEG) / 2;
+    if (!(height > sy)) throw new Error('the rows must clear the ground');
+    const ROWS = 200, POINTS = 400;
+    let total = 0;
+    for (let i = 0; i < POINTS; i++) {
+      const x = (i + 0.5) / POINTS * a;
+      const hidden = [];
+      for (let k = -ROWS; k <= ROWS; k++) {
+        const dx = k * a - x;
+        const t1 = Math.atan2(height + sy, dx - cx), t2 = Math.atan2(height - sy, dx + cx);
+        hidden.push([Math.min(t1, t2), Math.max(t1, t2)]);
+      }
+      hidden.sort((p, q) => p[0] - q[0]);
+      let seen = 0, from = 0; // open sky from angle `from` (0 = horizon on the +x side)
+      for (const [lo, hi] of hidden) {
+        if (lo > from) seen += (Math.cos(from) - Math.cos(lo)) / 2;
+        from = Math.max(from, hi);
+      }
+      seen += (Math.cos(from) - Math.cos(Math.PI)) / 2;
+      total += seen;
+    }
+    const v = total / POINTS;
+    groundSkyCache.set(key, v);
+    return v;
+  }
+
+  // Cosine of the beam's incidence angle on a plane of tilt beta, azimuth gamma (from
+  // south, west positive), at hour angle omega (Duffie & Beckman eq. 1.6.2).
+  const cosIncidence = (phi, d, beta, gamma, omega) =>
+    Math.sin(d) * Math.sin(phi) * Math.cos(beta) -
+    Math.sin(d) * Math.cos(phi) * Math.sin(beta) * Math.cos(gamma) +
+    Math.cos(d) * Math.cos(phi) * Math.cos(beta) * Math.cos(omega) +
+    Math.cos(d) * Math.sin(phi) * Math.sin(beta) * Math.cos(gamma) * Math.cos(omega) +
+    Math.cos(d) * Math.sin(beta) * Math.sin(gamma) * Math.sin(omega);
+
+  // Irradiation on the rear of fixed rows over the mean day of month day n, kWh/m², from
+  // the day's H and Hd spread over the day as for the front side (dayMoments). With the
+  // Hay–Davies sky, the circumsolar share A of the diffuse light comes from the sun's
+  // direction, so it counts as beam (as pvlib does); the rest is isotropic. Moment by moment:
+  //  - sky: the isotropic diffuse light times the rear's sky view;
+  //  - ground: the light on the ground between the rows times the albedo and the rear's
+  //    ground view. The ground gets beam on its sunlit share (1 − the rows' shadow,
+  //    GCR·|cos β + sin β tan φ| of the pitch, φ the sun's angle from the zenith across
+  //    the rows) and diffuse light by its own sky view (groundSkyView). Like pvlib, its
+  //    brightness is averaged over the pitch, and light reflected by other rows is left out;
+  //  - beam: when the sun is behind the rows (early and late in summer), on the part of
+  //    the rear the row behind does not shade.
+  // No glass reflection loss on the rear (pvlib's default too). geometry: {gcr, height}.
+  function rearDayIrradiation(lat, tilt, compassAz, n, day, { gcr, height }, albedo, skyA = 0, horizon = null) {
+    const phi = lat * DEG, beta = tilt * DEG, gamma = (compassAz - 180) * DEG, d = declination(n) * DEG;
+    const view = rearViewFactors(tilt, gcr), gndSky = groundSkyView(tilt, gcr, height);
+    const moments = dayMoments(phi, d, day);
+    const beamWeight = moments.reduce((s, m) => s + m.beam, 0);
+    const beamDay = Math.max(0, day.H - day.Hd);
+    let sky = 0, ground = 0, beam = 0;
+    for (const m of moments) {
+      const Dh = day.Hd * m.diffuse;
+      const Bh = beamWeight > 0 ? beamDay * m.beam / beamWeight : 0;
+      const circumsolar = skyA * Dh;
+      const blocked = horizon && behindSkyline(horizon, phi, d, m.omega, m.cosZ);
+      const B = blocked ? 0 : Bh + circumsolar; // beam-like light on the horizontal
+      const iso = Dh - circumsolar;
+      const tanZ = Math.sqrt(Math.max(0, 1 - m.cosZ * m.cosZ)) / m.cosZ;
+      const tanPhi = Math.cos(sunAzimuthFromSouth(phi, d, m.omega) - gamma) * tanZ; // + towards the front
+      const sunlit = Math.max(0, 1 - gcr * Math.abs(Math.cos(beta) + Math.sin(beta) * tanPhi));
+      sky += iso * view.sky;
+      ground += albedo * (sunlit * B + gndSky * iso) * view.ground;
+      const cosRear = -cosIncidence(phi, d, beta, gamma, m.omega);
+      if (cosRear > 0 && B > 0) {
+        const x = gcr * (-Math.sin(beta) * tanPhi - Math.cos(beta)); // shadow of the row behind
+        const shaded = x > 1 ? 1 - 1 / x : 0;
+        beam += B / m.cosZ * cosRear * (1 - shaded);
+      }
+    }
+    return { total: sky + ground + beam, sky, ground, beam };
+  }
+
   function monthlyYield(climatology, lat, tilt, compassAz, options = {}) {
     const o = { ...DEFAULTS, ...options };
     if (!SKY_MODELS.includes(o.skyModel)) throw new Error(`unknown sky model: ${o.skyModel}`);
     if (!BEAM_PROFILES.includes(o.beamProfile)) throw new Error(`unknown beam profile: ${o.beamProfile}`);
     if (!MOUNTINGS.includes(o.mounting)) throw new Error(`unknown mounting: ${o.mounting}`);
     const tracking = o.mounting === 'single-axis';
+    const bifacial = o.bifaciality != null;
+    if (bifacial) {
+      if (tracking) throw new Error('bifacial modules are modelled on fixed rows only');
+      if (!(o.bifaciality > 0 && o.bifaciality <= 1)) throw new Error('bifaciality must be in (0, 1]');
+      validGcr(o.bifacialGcr);
+      if (!(o.rearLoss >= 0 && o.rearLoss < 1)) throw new Error('rear loss must be in [0, 1)');
+    }
     const cosB = Math.cos(tilt * DEG);
     const kSky = (o.iamB0 > 0 ? incidenceModifier(Math.cos(skyIncidenceDeg(tilt) * DEG), o.iamB0) : 1);
     const kGround = o.iamB0 > 0 ? incidenceModifier(Math.cos(groundIncidenceDeg(tilt) * DEG), o.iamB0) : 1;
@@ -270,19 +390,25 @@
       const Rb = f.beam;
       const H0 = extraterrestrialDaily(lat, n);
       const A = o.skyModel === 'hay-davies' && H0 > 0 ? Math.min(1, (H - Hd) / H0) : 0;
-      const poaDaily = (H - Hd) * Rb +
+      const frontDaily = (H - Hd) * Rb +
         Hd * (A * Rb + (1 - A) * f.sky) +
         H * o.groundAlbedo * f.ground;
+      const rearDaily = bifacial
+        ? rearDayIrradiation(lat, tilt, compassAz, n, day, { gcr: o.bifacialGcr, height: o.bifacialHeight },
+          o.groundAlbedo, A, o.horizon).total
+        : 0;
+      const poaDaily = frontDaily + (bifacial ? o.bifaciality * (1 - o.rearLoss) * rearDaily : 0);
       const cellTemp = climatology.temp[m] + o.cellTempRise;
       const tempFactor = 1 + o.tempCoeff * (cellTemp - 25);
       const poa = poaDaily * DAYS_IN_MONTH[m];
-      return { poa, yield: poa * (1 - o.systemLoss) * tempFactor };
+      return { poa, rear: rearDaily * DAYS_IN_MONTH[m], yield: poa * (1 - o.systemLoss) * tempFactor };
     });
     const sum = (k) => months.reduce((s, x) => s + x[k], 0);
     return {
       monthly: months.map(x => x.yield),
       annual: sum('yield'),
       poaAnnual: sum('poa'),
+      rearAnnual: sum('rear'), // irradiation on the rear (kWh/m²), before bifaciality; 0 if monofacial
     };
   }
 
@@ -565,6 +691,7 @@
     systemLossFraction, SYSTEM_LOSS_MAX_PCT, climatologyIsFresh, CLIMATOLOGY_MAX_AGE_DAYS, DEFAULTS,
     extraterrestrialDaily, SKY_MODELS, BEAM_PROFILES, MOUNTINGS, trackerDayFactors, trackerAngles, dayMoments,
     sunPosition, parsePowerHourly, hourlyYield, huldEfficiency,
+    rearViewFactors, groundSkyView, rearDayIrradiation, MEAN_DAY,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarModel = api;
