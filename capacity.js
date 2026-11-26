@@ -95,7 +95,15 @@
     return Math.min(Math.max(v, 0), 90);
   }
 
+  // Bifacial modules (issue #67): the bifaciality factor from the module's datasheet, blank
+  // or unusable = monofacial (null), else clamped to 0.1–1.
+  function bifacialitySetting(input) {
+    const v = parseNumber(input);
+    return Number.isFinite(v) ? Math.min(Math.max(v, 0.1), 1) : null;
+  }
+
   const api = {
+    bifacialitySetting,
     winterNoonElevation, rowPitchFactor, groundCoverageRatio, gradeAwayFromEquator, siteCapacity,
     moduleEfficiencyFraction, usableShareFraction, trackerGcrSetting, trackerLimitSetting,
     DEFAULTS, MIN_SUN_ELEVATION_DEG, TRACKER_GCR_RANGE,

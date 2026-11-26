@@ -50,6 +50,9 @@ test('site boundary carries annual and monthly yield with its source', () => {
     tracker_rotation_limit_deg: null,
     tracker_capacity_kwp: null,
     tracker_energy_mwh_per_year: null,
+    bifacial_yield_kwh_per_kwp: null,
+    bifacial_gain_pct: null,
+    bifaciality: null,
     terrain_slope_deg: null,
     terrain_aspect_deg: null,
     terrain_grade_north_pct: null,
@@ -149,6 +152,12 @@ test('the tracker layout: GCR, rotation limit, capacity and energy, rounded', ()
     [0.33, 60, 3457, 3941]);
   const free = buildGeoJSON(data, stats({ tracker: { ...tracker, limit: null, capacity: undefined } })).features.at(-1).properties;
   assert.deepEqual([free.tracker_rotation_limit_deg, free.tracker_capacity_kwp, free.tracker_energy_mwh_per_year], [null, null, null]);
+});
+
+test('the bifacial alternative is exported when it is set', () => {
+  const bifacial = { yield: 1721, gainPct: 8, rear: 198, ratioPct: 10.2, bifaciality: 0.8 };
+  const p = buildGeoJSON(data, stats({ bifacial })).features.at(-1).properties;
+  assert.deepEqual([p.bifacial_yield_kwh_per_kwp, p.bifacial_gain_pct, p.bifaciality], [1721, 8, 0.8]);
 });
 
 test('the terrain plane is exported rounded, with no aspect on level ground', () => {
