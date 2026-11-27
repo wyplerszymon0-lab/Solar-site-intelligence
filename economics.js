@@ -85,6 +85,22 @@
       npv(inputs.rate, cashFlows({ ...inputs, om, yieldKwh }));
   }
 
+  // An alternative (a tracker, issue #55; bifacial modules, issue #69) against the base case,
+  // at each yield level given (P50, P90): what it may cost extra, and with extraCapex given,
+  // its own LCOE, payback and NPV at capex + extraCapex and om + extraOm.
+  function compareAlternative(inputs, levels, { extraCapex = null, extraOm = 0 } = {}) {
+    const om = inputs.om ?? DEFAULTS.om;
+    return levels.map(({ yieldKwh, altYieldKwh }) => ({
+      yieldKwh: altYieldKwh,
+      breakEven: breakEvenExtraInvestment({ ...inputs, yieldKwh, altYieldKwh, extraOm }),
+      priced: extraCapex != null,
+      firstYearRevenue: altYieldKwh * inputs.price,
+      ...(extraCapex != null
+        ? evaluate({ ...inputs, capex: inputs.capex + extraCapex, om: om + extraOm, yieldKwh: altYieldKwh })
+        : {}),
+    }));
+  }
+
   // A number typed by the user ("1 200", "0,85") or null when empty or unusable.
   function parseAmount(input) {
     const s = String(input ?? '').replace(/\s/g, '').replace(',', '.');
@@ -93,7 +109,7 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  const api = { cashFlows, npv, irr, payback, lcoe, evaluate, breakEvenExtraInvestment, parseAmount, energyByYear, DEFAULTS };
+  const api = { cashFlows, npv, irr, payback, lcoe, evaluate, breakEvenExtraInvestment, compareAlternative, parseAmount, energyByYear, DEFAULTS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SolarEconomics = api;
 })(typeof window !== 'undefined' ? window : globalThis);

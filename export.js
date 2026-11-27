@@ -67,6 +67,10 @@
           bifacial_yield_kwh_per_kwp: stats.bifacial ? stats.bifacial.yield : null,
           bifacial_gain_pct: stats.bifacial ? stats.bifacial.gainPct : null,
           bifaciality: stats.bifacial ? stats.bifacial.bifaciality : null,
+          bifacial_p50_kwh_per_kwp: stats.bifacial?.variability ? stats.bifacial.variability.p50 : null,
+          bifacial_p90_kwh_per_kwp: stats.bifacial?.variability ? stats.bifacial.variability.p90Year : null,
+          bifacial_energy_mwh_per_year_p50: stats.bifacial?.mwhP50 != null ? Math.round(stats.bifacial.mwhP50) : null,
+          bifacial_energy_mwh_per_year_p90: stats.bifacial?.mwhP90 != null ? Math.round(stats.bifacial.mwhP90) : null,
           // The ground as a least-squares plane through the surveyed heights (issue #63); null if undefined.
           terrain_slope_deg: stats.terrain ? round(stats.terrain.slopeDeg, 2) : null,
           terrain_aspect_deg: stats.terrain && stats.terrain.aspectDeg != null ? round(stats.terrain.aspectDeg, 1) : null,

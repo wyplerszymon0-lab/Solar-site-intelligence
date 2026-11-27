@@ -88,3 +88,32 @@ test('amounts typed by people: spaces, decimal commas, empty', () => {
   assert.equal(E.parseAmount('abc'), null);
   assert.equal(E.parseAmount(undefined), null);
 });
+
+// ─── Any alternative against the base case: tracker (#55), bifacial modules (#69) ───
+
+test('compare an alternative at P50 and P90: break-even per level, priced only with an extra investment', () => {
+  const base = { capex: 650, price: 0.08, om: 12, rate: 0.06, degradation: 0.005, lifetime: 30 };
+  const levels = [{ yieldKwh: 1045, altYieldKwh: 1120 }, { yieldKwh: 990, altYieldKwh: 1058 }];
+  const [p50, p90] = E.compareAlternative(base, levels);
+  close(p50.breakEven, E.breakEvenExtraInvestment({ ...base, ...levels[0] }));
+  close(p90.breakEven, E.breakEvenExtraInvestment({ ...base, ...levels[1] }));
+  assert.ok(p90.breakEven < p50.breakEven, 'a cautious year leaves less margin');
+  assert.equal(p50.priced, false);
+  assert.equal(p50.npv, undefined);
+  close(p50.firstYearRevenue, 1120 * 0.08);
+  // Priced at exactly the P50 break-even, the alternative's NPV equals the base case's.
+  const [atBreakEven] = E.compareAlternative(base, levels, { extraCapex: p50.breakEven });
+  close(atBreakEven.npv, E.evaluate({ ...base, yieldKwh: 1045 }).npv, 1e-9);
+  // Extra O&M goes into both the break-even and the priced case.
+  const [withOm] = E.compareAlternative(base, levels, { extraCapex: 100, extraOm: 3 });
+  close(withOm.breakEven, E.breakEvenExtraInvestment({ ...base, ...levels[0], extraOm: 3 }));
+  close(withOm.npv, E.evaluate({ ...base, capex: 750, om: 15, yieldKwh: 1120 }).npv);
+});
+
+test('an alternative with the same yield and no extra cost is the base case', () => {
+  const base = { capex: 900, price: 0.11, rate: 0.05 };
+  const [same] = E.compareAlternative(base, [{ yieldKwh: 1300, altYieldKwh: 1300 }], { extraCapex: 0 });
+  close(same.breakEven, 0);
+  const ref = E.evaluate({ ...base, yieldKwh: 1300 });
+  for (const k of ['npv', 'lcoe', 'payback', 'irr', 'firstYearRevenue']) close(same[k], ref[k]);
+});
