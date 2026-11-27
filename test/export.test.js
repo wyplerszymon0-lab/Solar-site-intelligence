@@ -53,6 +53,10 @@ test('site boundary carries annual and monthly yield with its source', () => {
     bifacial_yield_kwh_per_kwp: null,
     bifacial_gain_pct: null,
     bifaciality: null,
+    bifacial_p50_kwh_per_kwp: null,
+    bifacial_p90_kwh_per_kwp: null,
+    bifacial_energy_mwh_per_year_p50: null,
+    bifacial_energy_mwh_per_year_p90: null,
     terrain_slope_deg: null,
     terrain_aspect_deg: null,
     terrain_grade_north_pct: null,
@@ -158,6 +162,12 @@ test('the bifacial alternative is exported when it is set', () => {
   const bifacial = { yield: 1721, gainPct: 8, rear: 198, ratioPct: 10.2, bifaciality: 0.8 };
   const p = buildGeoJSON(data, stats({ bifacial })).features.at(-1).properties;
   assert.deepEqual([p.bifacial_yield_kwh_per_kwp, p.bifacial_gain_pct, p.bifaciality], [1721, 8, 0.8]);
+  assert.deepEqual([p.bifacial_p50_kwh_per_kwp, p.bifacial_energy_mwh_per_year_p50], [null, null]);
+  // With the yearly series and a row layout (issue #69): P50/P90 per kWp and for the site.
+  const full = { ...bifacial, variability: { p50: 1719, p90Year: 1602, p90LongTerm: 1650 }, mwhP50: 5943.6, mwhP90: 5538.4 };
+  const q = buildGeoJSON(data, stats({ bifacial: full })).features.at(-1).properties;
+  assert.deepEqual([q.bifacial_p50_kwh_per_kwp, q.bifacial_p90_kwh_per_kwp, q.bifacial_energy_mwh_per_year_p50, q.bifacial_energy_mwh_per_year_p90],
+    [1719, 1602, 5944, 5538]);
 });
 
 test('the terrain plane is exported rounded, with no aspect on level ground', () => {

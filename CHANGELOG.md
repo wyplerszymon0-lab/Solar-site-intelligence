@@ -43,6 +43,11 @@ All notable changes to this project are documented here. The format follows
   from behind) over the mean day, within 0.03% of pvlib's rear irradiance at 7 sites, 12
   months and 4 row geometries. Shown on a Bifacial card, in the AI prompt and the GeoJSON;
   capacity energy, economics and P90 stay monofacial (#67).
+- **Bifacial P50 / P90 and economics.**
+  - The rear side is computed for every year since 2001, which gives a bifacial P50 / P90 and the site's bifacial energy.
+  - The economics table shows how much more per kWp bifacial modules may cost and still match the monofacial NPV, at P50 and the 10-year P90. Warsaw at 39°: +107 / +102 kWh/kWp a year to pay for it.
+  - An optional extra investment adds bifacial P50 and P90 columns.
+  - The rear model's own uncertainty is not in the P90 (#69).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:

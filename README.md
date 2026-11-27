@@ -516,7 +516,28 @@ With the Hay–Davies sky, the circumsolar share counts as beam. Yield = front +
 - **Not modelled:** light reflected by other rows, the rear's glass reflection loss, row ends, trackers and sloping ground.
 - **Assumed albedo:** the app's 0.2.
 - **No field data.** The check is against pvlib only, so it shows that the geometry is computed right, not that the gain is what a real plant measures.
-- **Monofacial elsewhere:** the capacity card's energy, the economics and the P90 stay monofacial.
+- **Fixed rows only:** the tracker stays monofacial.
+
+### Bifacial P50 / P90 and economics (issue #69)
+
+The rear side is computed for each year since 2001, as the front side is. The year-to-year spread and the estimate uncertainty then give a bifacial P50 / P90, in the same way as the [monofacial P50 / P90](#adding-the-uncertainty-of-the-estimate-issue-43). The bifacial card's tooltip shows them, the capacity card shows the site's bifacial energy, and both go into the AI prompt and the GeoJSON.
+
+The price difference between bifacial and monofacial modules is not guessed. The economics table instead says how much more per kWp the bifacial modules may cost before their NPV falls to the monofacial one, at P50 and at the 10-year P90. It uses the same break-even as for the [tracker](#tracker-against-fixed-issue-55), with the same O&M for both kinds of module. With an extra investment entered, the table gets bifacial P50 and P90 columns with their LCOE, payback and NPV.
+
+Without extra O&M, the break-even is the extra energy × the energy value × the discounted sum of the degraded years. So it scales with the extra kWh per kWp:
+
+| Bifaciality 0.8, rows at ¾ latitude (2001–2025) | Tilt | GCR | P50 mono → bifacial | Extra, P50 | 10-year P90 mono → bifacial | Extra, P90 |
+|---|---:|---:|---:|---:|---:|---:|
+| Warsaw | 39° | 0.31 | 1045 → 1152 | +107 | 991 → 1093 | +102 |
+| Lisbon | 29° | 0.56 | 1589 → 1678 | +89 | 1510 → 1594 | +84 |
+| Cairo | 23° | 0.69 | 1760 → 1831 | +71 | 1674 → 1741 | +67 |
+| Oslo | 45° | 0.15 | 1034 → 1170 | +136 | 981 → 1111 | +130 |
+
+(kWh/kWp a year; from the monthly NASA POWER fixtures in `test/fixtures`.) The cautious year takes about 5% off the margin.
+
+The bifacial yield also varies a little less from year to year, for example 4.2% against 4.5% at Warsaw. The rear gains more in weaker years: the gain's correlation with the monofacial yield is −0.56 to −0.93 at these four sites.
+
+**Limits.** The P90 carries the front side's estimate uncertainty only. The rear model's own, above all the assumed albedo, is not in it, because there is no field data here to measure it. The bifacial P90 is therefore less cautious than it looks.
 
 ## A note on the heuristic estimates
 

@@ -115,7 +115,7 @@ const I18N = {
     'cfg.bifacialNote': 'For the bifacial card: the rear\'s efficiency relative to the front, from the module\'s datasheet. The rows are the fixed rows of the capacity card, at its ground coverage ratio.',
     'stat.bifacial': 'Bifacial modules, fixed rows: kWh/kWp per year · gain from the rear side',
     'stat.bifacialOff': 'Monofacial modules. Enter the bifaciality in Configuration to see what the rear side adds.',
-    'stat.bifacialTitle': 'The rear of the fixed rows receives {rear} kWh/m² a year, {ratio}% of the front: sky light between the rows, light reflected by the ground (albedo {albedo}, partly shaded by the rows) and low sun from behind. Yield = front + {bf} bifaciality × (1 − {loss}% for the racking) × rear. Rows at ground coverage {gcr}, {tilt}° tilt, on flat ground. 2-D view-factor model of long rows (infinite sheds), within 0.1% of pvlib\'s rear irradiance; like pvlib\'s, it averages the ground\'s brightness between the rows, so the rows\' height does not enter. Capacity, economics and P90 above stay monofacial.',
+    'stat.bifacialTitle': 'The rear of the fixed rows receives {rear} kWh/m² a year, {ratio}% of the front: sky light between the rows, light reflected by the ground (albedo {albedo}, partly shaded by the rows) and low sun from behind. Yield = front + {bf} bifaciality × (1 − {loss}% for the racking) × rear. Rows at ground coverage {gcr}, {tilt}° tilt, on flat ground. 2-D view-factor model of long rows (infinite sheds), within 0.1% of pvlib\'s rear irradiance; like pvlib\'s, it averages the ground\'s brightness between the rows, so the rows\' height does not enter. The capacity card and the economics table show the bifacial case next to the monofacial one.',
     'cfg.trackerGcr': 'TRACKER GROUND COVERAGE RATIO',
     'cfg.trackerLimit': 'TRACKER ROTATION LIMIT (°, BLANK = NONE)',
     'cfg.trackerNote': 'For the single-axis tracker card: module width over row pitch, typically 0.25–0.40 for tracking plants (Bolinger & Bolinger 2022). Denser rows backtrack more. The limit is the tracker\'s mechanical stop from its datasheet.',
@@ -145,6 +145,12 @@ const I18N = {
     'econ.breakEvenNever': 'never: even at no extra cost it is {v} per kWp worse',
     'econ.trackerNote': 'Tracker: its P50 yield with backtracking from the tracker card, which is uncertain by several percent either way, and no P90. Enter its extra investment to see its LCOE, payback and NPV; the break-even needs none. Whole site: each layout at its own MWp on the same land.',
     'econ.years': '{n} yr',
+    'econ.bifacialCapex': 'BIFACIAL: EXTRA INVESTMENT / kWp',
+    'econ.bifacialCol': 'Bifacial {p}',
+    'econ.bifacialBreakEven': 'Bifacial modules pay off against monofacial ones (same NPV)',
+    'econ.bifacialNote': 'Bifacial: the same rows, capacity and O&M, with the rear side from the Bifacial card. Its P90 has the same uncertainty as the monofacial P90; the rear model\'s own, above all the assumed albedo, is not in it. Enter the extra investment for bifacial modules to see their LCOE, payback and NPV; the break-even needs none.',
+    'stat.bifacialP90': ' P50 / P90 with the rear side: {p50} / {p90} kWh/kWp ({first}–{last}), the same years and estimate uncertainty as the monofacial P50 / P90.',
+    'stat.capacityBifacial': ' With bifacial modules: {p50} / {p90} MWh a year.',
     'econ.resultNote': '{years} years, {deg}% degradation a year. P90 is the 10-year P90 every year: the average yield exceeded with 90% confidence, weather and estimate uncertainty included. A cautious case, not a forecast.',
     'charts.horizon': 'Horizon and Sun Path',
     'charts.horizonSkyline': 'skyline',
@@ -325,7 +331,7 @@ const I18N = {
     'cfg.bifacialNote': 'Do karty modułów bifacjalnych: sprawność tylnej strony względem przedniej, z karty katalogowej modułu. Rzędy to rzędy stałe z karty mocy, przy jej pokryciu terenu.',
     'stat.bifacial': 'Moduły bifacjalne, rzędy stałe: kWh/kWp rocznie · zysk z tylnej strony',
     'stat.bifacialOff': 'Moduły jednostronne. Wpisz bifacjalność w konfiguracji, żeby zobaczyć, co dodaje tylna strona.',
-    'stat.bifacialTitle': 'Tył rzędów stałych dostaje {rear} kWh/m² rocznie, {ratio}% tego co przód: światło nieba między rzędami, światło odbite od gruntu (albedo {albedo}, częściowo w cieniu rzędów) i niskie słońce od tyłu. Uzysk = przód + bifacjalność {bf} × (1 − {loss}% na konstrukcję) × tył. Rzędy przy pokryciu terenu {gcr}, nachyleniu {tilt}°, na płaskim gruncie. Dwuwymiarowy model współczynników widoku długich rzędów (infinite sheds), w granicach 0,1% od pvlib dla promieniowania na tył; jak w pvlib jasność gruntu jest uśredniona między rzędami, więc wysokość rzędów nie ma wpływu. Moc, ekonomia i P90 powyżej dotyczą modułów jednostronnych.',
+    'stat.bifacialTitle': 'Tył rzędów stałych dostaje {rear} kWh/m² rocznie, {ratio}% tego co przód: światło nieba między rzędami, światło odbite od gruntu (albedo {albedo}, częściowo w cieniu rzędów) i niskie słońce od tyłu. Uzysk = przód + bifacjalność {bf} × (1 − {loss}% na konstrukcję) × tył. Rzędy przy pokryciu terenu {gcr}, nachyleniu {tilt}°, na płaskim gruncie. Dwuwymiarowy model współczynników widoku długich rzędów (infinite sheds), w granicach 0,1% od pvlib dla promieniowania na tył; jak w pvlib jasność gruntu jest uśredniona między rzędami, więc wysokość rzędów nie ma wpływu. Karta mocy i tabela ekonomii pokazują wariant bifacjalny obok jednostronnego.',
     'cfg.trackerGcr': 'POKRYCIE TERENU PRZEZ TRACKERY (GCR)',
     'cfg.trackerLimit': 'LIMIT OBROTU TRACKERA (°, PUSTE = BRAK)',
     'cfg.trackerNote': 'Do karty trackera jednoosiowego: szerokość modułu przez rozstaw rzędów, zwykle 0,25–0,40 w farmach z trackerami (Bolinger & Bolinger 2022). Gęstsze rzędy częściej robią backtracking. Limit to mechaniczny zakres obrotu z karty katalogowej trackera.',
@@ -355,6 +361,12 @@ const I18N = {
     'econ.breakEvenNever': 'nigdy: nawet bez dopłaty jest o {v} na kWp gorszy',
     'econ.trackerNote': 'Tracker: jego uzysk P50 z backtrackingiem z karty trackera, niepewny o kilka procent w obie strony, bez P90. Wpisz dopłatę do inwestycji, żeby zobaczyć jego LCOE, zwrot i NPV; próg opłacalności jej nie wymaga. Cały teren: każdy układ przy własnej mocy MWp na tym samym terenie.',
     'econ.years': '{n} lat',
+    'econ.bifacialCapex': 'BIFACJALNE: DOPŁATA DO INWESTYCJI / kWp',
+    'econ.bifacialCol': 'Bifacjalne {p}',
+    'econ.bifacialBreakEven': 'Moduły bifacjalne opłacają się względem jednostronnych (to samo NPV)',
+    'econ.bifacialNote': 'Bifacjalne: te same rzędy, moc i O&M, z tylną stroną z karty modułów bifacjalnych. Ich P90 ma tę samą niepewność co P90 modułów jednostronnych; nie ma w nim niepewności samego modelu tyłu, przede wszystkim przyjętego albedo. Wpisz dopłatę za moduły bifacjalne, żeby zobaczyć ich LCOE, zwrot i NPV; próg opłacalności jej nie wymaga.',
+    'stat.bifacialP90': ' P50 / P90 z tylną stroną: {p50} / {p90} kWh/kWp ({first}–{last}), te same lata i niepewność szacunku co P50 / P90 modułów jednostronnych.',
+    'stat.capacityBifacial': ' Z modułami bifacjalnymi: {p50} / {p90} MWh rocznie.',
     'econ.resultNote': '{years} lat, degradacja {deg}% rocznie. P90 to 10-letnie P90 co roku: średni uzysk przekraczany z 90% pewnością, z niepewnością pogody i szacunku. Wariant ostrożny, nie prognoza.',
     'charts.horizon': 'Horyzont i droga słońca',
     'charts.horizonSkyline': 'linia horyzontu',
@@ -672,7 +684,7 @@ function currentCRS() {
 
 // ─── Economics inputs (the user's own prices, remembered in this browser) ───
 
-const ECONOMICS_FIELDS = ['currency', 'capex', 'price', 'om', 'rate', 'degradation', 'lifetime', 'tracker-capex', 'tracker-om'];
+const ECONOMICS_FIELDS = ['currency', 'capex', 'price', 'om', 'rate', 'degradation', 'lifetime', 'tracker-capex', 'tracker-om', 'bifacial-capex'];
 const econInput = (field) => document.getElementById('econ-' + field);
 
 // The inputs as numbers for economics.js, or null until investment, energy value
@@ -693,6 +705,8 @@ function currentEconomics() {
     // tracker's own NPV, LCOE and payback are not shown; the break-even always is.
     trackerExtraCapex: n('tracker-capex'),
     trackerExtraOm: Math.max(0, n('tracker-om') ?? 0),
+    // Bifacial over monofacial modules (issue #69): optional, the same way.
+    bifacialExtraCapex: n('bifacial-capex'),
   };
 }
 
@@ -717,23 +731,27 @@ function economicsFor(stats) {
   const p50Yield = stats.variability ? stats.variability.p50 : stats.yieldEst;
   let tracker = null;
   if (stats.tracker && stats.yieldSource === 'satellite') {
-    const yieldKwh = stats.tracker.yield;
-    const breakEven = SolarEconomics.breakEvenExtraInvestment({
-      ...inputs, yieldKwh: p50Yield, altYieldKwh: yieldKwh, extraOm: inputs.trackerExtraOm,
-    });
-    const priced = inputs.trackerExtraCapex != null;
-    tracker = {
-      yieldKwh, breakEven, priced, firstYearRevenue: yieldKwh * inputs.price,
-      ...(priced ? SolarEconomics.evaluate({
-        ...inputs, capex: inputs.capex + inputs.trackerExtraCapex, om: inputs.om + inputs.trackerExtraOm, yieldKwh,
-      }) : {}),
-    };
+    [tracker] = SolarEconomics.compareAlternative(inputs, [{ yieldKwh: p50Yield, altYieldKwh: stats.tracker.yield }],
+      { extraCapex: inputs.trackerExtraCapex, extraOm: inputs.trackerExtraOm });
+  }
+  // Bifacial modules on the same rows (issue #69), at P50 and the 10-year P90 when the
+  // yearly series is in; same O&M as monofacial modules.
+  let bifacial = null;
+  const bf = stats.bifacial;
+  if (bf) {
+    const levels = [{ yieldKwh: p50Yield, altYieldKwh: bf.variability ? bf.variability.p50 : bf.yield }];
+    if (stats.variability && bf.variability) {
+      levels.push({ yieldKwh: stats.variability.p90LongTerm, altYieldKwh: bf.variability.p90LongTerm });
+    }
+    const [p50, p90 = null] = SolarEconomics.compareAlternative(inputs, levels, { extraCapex: inputs.bifacialExtraCapex });
+    bifacial = { p50, p90 };
   }
   return {
     inputs,
     p50: run(p50Yield),
     p90: stats.variability ? run(stats.variability.p90LongTerm) : null, // issue #43: the 10-year P90
     tracker,
+    bifacial,
   };
 }
 
@@ -1069,8 +1087,23 @@ function computeSiteStats(data) {
       yield: Math.round(both.annual), gainPct: Math.round((both.annual / front.annual - 1) * 1000) / 10,
       rear: Math.round(both.rearAnnual), ratioPct: Math.round(both.rearAnnual / front.poaAnnual * 1000) / 10,
       bifaciality, gcr, tilt: rowTilt, albedo: SolarModel.DEFAULTS.groundAlbedo,
-      rearLossPct: SolarModel.DEFAULTS.rearLoss * 100,
+      rearLossPct: SolarModel.DEFAULTS.rearLoss * 100, variability: null,
     };
+    // P50/P90 with the rear side (issue #69): the same years and the same estimate
+    // uncertainty as the monofacial P50/P90; the rear model's own uncertainty is not in it.
+    if (variability) {
+      const e = SolarModel.exceedance(SolarModel.yearlyYields(series.years, centerLat, rowTilt, avgAz ?? facingAz, opts).map(y => y.annual));
+      bifacial.variability = {
+        p50: Math.round(e.p50),
+        p90Year: Math.round(SolarModel.exceedanceWithEstimate(e, 1).p90),
+        p90LongTerm: Math.round(SolarModel.exceedanceWithEstimate(e, 10).p90),
+      };
+    }
+    if (capacity) {
+      const v = bifacial.variability;
+      bifacial.mwhP50 = capacity.kWp * (v ? v.p50 : bifacial.yield) / 1000;
+      bifacial.mwhP90 = v ? capacity.kWp * v.p90Year / 1000 : null;
+    }
   }
 
   const benchmarkPct = Math.round((yieldEst - optimalYield) / optimalYield * 100);
@@ -1544,7 +1577,9 @@ function renderStats(data, stats) {
     ? t('stat.bifacialTitle', {
       rear: bf.rear.toLocaleString(), ratio: bf.ratioPct.toLocaleString(), albedo: bf.albedo, bf: bf.bifaciality,
       loss: bf.rearLossPct, gcr: bf.gcr.toFixed(2), tilt: bf.tilt.toFixed(0),
-    })
+    }) + (bf.variability && v ? t('stat.bifacialP90', {
+      p50: bf.variability.p50.toLocaleString(), p90: bf.variability.p90Year.toLocaleString(), first: v.first, last: v.last,
+    }) : '')
     : t('stat.bifacialOff');
 
   const tr = stats.tracker;
@@ -1584,7 +1619,9 @@ function renderStats(data, stats) {
     }) + ' ' + (cap.gradePct == null ? t('stat.capacityFlat') : t('stat.capacityGrade', {
       grade: (cap.gradePct >= 0 ? '+' : '−') + Math.abs(cap.gradePct).toFixed(1),
       flatGcr: cap.flatGcr.toFixed(2), flatKwp: Math.round(cap.flatKWp).toLocaleString(),
-    }))
+    })) + (bf?.mwhP50 != null ? t('stat.capacityBifacial', {
+      p50: Math.round(bf.mwhP50).toLocaleString(), p90: bf.mwhP90 != null ? Math.round(bf.mwhP90).toLocaleString() : '—',
+    }) : '')
     : (stats.area > 0 ? t(stats.noRowsFromSlope ? 'stat.capacitySlope' : 'stat.capacityPolar') : '');
 
   const benchEl = document.getElementById('stat-benchmark');
@@ -1622,10 +1659,14 @@ function renderEconomics(econ, capacity = null, trackerCapacity = null) {
   const lcoeDigits = econ.p50.lcoe < 1 ? 3 : 2;
   // Columns: fixed array at P50 (and 10-year P90), then the tracker at its P50 (issue #55),
   // each with the capacity of its own layout for the whole-site rows.
-  const tr = econ.tracker;
+  const tr = econ.tracker, bf = econ.bifacial;
+  // Bifacial modules (issue #69) sit on the fixed rows, so they share the fixed capacity.
+  const bfCapex = bf?.p50.priced ? econ.inputs.capex + econ.inputs.bifacialExtraCapex : null;
   const cols = [
     { ...econ.p50, head: 'P50', capex: econ.inputs.capex, kWp: capacity?.kWp },
     ...(econ.p90 ? [{ ...econ.p90, head: 'P90', capex: econ.inputs.capex, kWp: capacity?.kWp }] : []),
+    ...(bf ? [{ ...bf.p50, head: t('econ.bifacialCol', { p: 'P50' }), capex: bfCapex, kWp: capacity?.kWp }] : []),
+    ...(bf?.p90 ? [{ ...bf.p90, head: t('econ.bifacialCol', { p: 'P90' }), capex: bfCapex, kWp: capacity?.kWp }] : []),
     ...(tr ? [{ ...tr, head: t('econ.trackerCol'), capex: tr.priced ? econ.inputs.capex + econ.inputs.trackerExtraCapex : null, kWp: trackerCapacity?.kWp }] : []),
   ];
   const priced = (c) => c.npv != null; // the tracker without an extra investment has no NPV
@@ -1645,6 +1686,12 @@ function renderEconomics(econ, capacity = null, trackerCapacity = null) {
     (tr
       ? `<tr><td>${t('econ.breakEven')}</td><td colspan="${cols.length}">${t(tr.breakEven >= 0 ? 'econ.breakEvenUpTo' : 'econ.breakEvenNever', { v: money(Math.abs(tr.breakEven)) })}</td></tr>`
       : '') +
+    (bf
+      ? `<tr><td>${t('econ.bifacialBreakEven')}</td><td colspan="${cols.length}">` +
+        [bf.p50, bf.p90].filter(Boolean).map((x, i) =>
+          `${i ? 'P90' : 'P50'}: ${t(x.breakEven >= 0 ? 'econ.breakEvenUpTo' : 'econ.breakEvenNever', { v: money(Math.abs(x.breakEven)) })}`).join('; ') +
+        `</td></tr>`
+      : '') +
     (capacity || trackerCapacity
       ? `<tr><th colspan="${cols.length + 1}">${t('econ.site', { mwp: siteMwp.join(' / ') })}</th></tr>` +
         row(t('econ.investment'), c => site(c, c => (c.capex == null ? '—' : money(c.capex * c.kWp)))) +
@@ -1654,7 +1701,7 @@ function renderEconomics(econ, capacity = null, trackerCapacity = null) {
       : '') +
     `</tbody></table>` +
     `<div class="key-note">${t('econ.resultNote', { years: econ.inputs.lifetime, deg: +(econ.inputs.degradation * 100).toFixed(2) })}` +
-    (tr ? ' ' + t('econ.trackerNote') : '') + `</div>`;
+    (tr ? ' ' + t('econ.trackerNote') : '') + (bf ? ' ' + t('econ.bifacialNote') : '') + `</div>`;
 }
 
 // ─── Map view toggle (markers / heatmap) ──────────────────
@@ -1792,8 +1839,16 @@ function buildInitialPrompt(stats) {
       ? `BIFACIAL MODULES (fixed rows, bifaciality ${stats.bifacial.bifaciality}): ${stats.bifacial.yield} kWh/kWp/yr, ` +
         `${stats.bifacial.gainPct}% over monofacial at the same orientation; the rear receives ${stats.bifacial.rear} kWh/m²/yr ` +
         `(${stats.bifacial.ratioPct}% of the front) at ground coverage ratio ${stats.bifacial.gcr.toFixed(2)} on flat ground, ` +
-        `albedo ${stats.bifacial.albedo} (assumed); 2-D view-factor model with the ground averaged between rows, row height not modelled. Capacity, energy, economics ` +
-        `and P90 above are monofacial.\n\n`
+        `albedo ${stats.bifacial.albedo} (assumed); 2-D view-factor model with the ground averaged between rows, row height not modelled` +
+        (stats.bifacial.variability
+          ? `. Bifacial P50 / 1-year P90: ${stats.bifacial.variability.p50} / ${stats.bifacial.variability.p90Year} kWh/kWp/yr ` +
+            `(same years and estimate uncertainty as the monofacial P50/P90; the uncertainty of the rear model itself, mainly the albedo, is not included)`
+          : '') +
+        (stats.bifacial.mwhP50 != null
+          ? `. Whole site with bifacial modules: ${Math.round(stats.bifacial.mwhP50)}` +
+            `${stats.bifacial.mwhP90 != null ? ` / ${Math.round(stats.bifacial.mwhP90)}` : ''} MWh/yr (P50${stats.bifacial.mwhP90 != null ? ' / P90' : ''}) at the same capacity`
+          : '') +
+        `. The capacity, energy and P90 lines above are monofacial.\n\n`
       : '') +
     `Provide a structured analysis with these sections:\n\n` +
     headers.map(h => `### ${h}`).join('\n');

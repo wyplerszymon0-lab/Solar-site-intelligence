@@ -96,3 +96,25 @@ test('the bifaciality setting: blank is monofacial, values are clamped', () => {
   assert.equal(C.bifacialitySetting('0,75'), 0.75);
   assert.equal(C.bifacialitySetting(3), 1);
 });
+
+test('bifacial P50/P90: every year gets its own rear side, and the bifacial yield varies less', () => {
+  // Issue #69. Same rows as the app: the no-shading GCR at three quarters of the latitude.
+  for (const [name, lat] of [['warsaw', 52.23], ['lisbon', 38.72], ['cairo', 30.04], ['oslo', 59.91]]) {
+    const years = M.parsePowerMonthly(require(`./fixtures/nasa-power-monthly-${name}.json`));
+    const tilt = Math.round(lat * 0.75), opts = { bifaciality: 0.8, bifacialGcr: C.groundCoverageRatio(lat, tilt), bifacialHeight: 1 };
+    const mono = M.yearlyYields(years, lat, tilt, 180), bi = M.yearlyYields(years, lat, tilt, 180, opts);
+    bi.forEach((y, i) => {
+      assert.equal(y.annual, M.monthlyYield(years[i], lat, tilt, 180, opts).annual);
+      assert.ok(y.annual > mono[i].annual, `${name} ${y.year}`);
+    });
+    // The P50 gain is the climatology's gain to 0.05 points.
+    const eMono = M.exceedance(mono.map(y => y.annual)), eBi = M.exceedance(bi.map(y => y.annual));
+    const clim = M.climatologyFromSeries(years);
+    const climGain = M.monthlyYield(clim, lat, tilt, 180, opts).annual / M.monthlyYield(clim, lat, tilt, 180).annual;
+    assert.ok(Math.abs(eBi.p50 / eMono.p50 - climGain) < 5e-4, `${name} ${eBi.p50 / eMono.p50} vs ${climGain}`);
+    // The gain is larger in weaker years (correlation with the monofacial yield −0.56 to −0.93
+    // at these sites; with the diffuse share +0.7 at three of them, none at Oslo), so the spread
+    // of the bifacial yield is a little smaller.
+    assert.ok(eBi.cov < eMono.cov, `${name} cov ${eBi.cov} vs ${eMono.cov}`);
+  }
+});
