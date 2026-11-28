@@ -46,6 +46,9 @@
           yield_data_years: stats.yieldSource === 'satellite' && stats.climPeriod
             ? `${stats.climPeriod.first}-${stats.climPeriod.last}` : null,
           system_loss_pct: stats.systemLossPct,
+          // Ground albedo in use (issue #71) and its source: a surface of pvlib's table, or 'custom'.
+          ground_albedo: stats.ground ? stats.ground.albedo : null,
+          ground_surface: stats.ground ? stats.ground.surface : null,
           // Whole-site DC capacity and energy (issue #45); null where no row layout fits.
           capacity_kwp: stats.capacity ? Math.round(stats.capacity.kWp) : null,
           ground_coverage_ratio: stats.capacity ? Math.round(stats.capacity.gcr * 1000) / 1000 : null,

@@ -48,6 +48,10 @@ All notable changes to this project are documented here. The format follows
   - The economics table shows how much more per kWp bifacial modules may cost and still match the monofacial NPV, at P50 and the 10-year P90. Warsaw at 39°: +107 / +102 kWh/kWp a year to pay for it.
   - An optional extra investment adds bifacial P50 and P90 columns.
   - The rear model's own uncertainty is not in the P90 (#69).
+- **Ground albedo setting.** Choose the ground under the rows from pvlib's surface table (grass 0.20, the default;
+  fresh grass, bare soil, sand, concrete, urban) or enter a measured value. It applies to every yield, the tracker and
+  the P50/P90. The Bifacial card shows what +0.1 of albedo adds. Warsaw at 39°: the bifacial gain goes from +10.3%
+  on grass to +17.4% on sand (#71).
 
 ### Changed
 - The AI backend authenticates to the Claude API with workload identity federation:

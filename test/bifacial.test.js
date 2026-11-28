@@ -118,3 +118,23 @@ test('bifacial P50/P90: every year gets its own rear side, and the bifacial yiel
     assert.ok(eBi.cov < eMono.cov, `${name} cov ${eBi.cov} vs ${eMono.cov}`);
   }
 });
+
+test('ground albedo: the rear and the front are affine in it, grass leaves the results unchanged', () => {
+  // Issue #71. Lisbon at 35°, rows at the no-shading GCR.
+  const c = clim('lisbon'), gcr = C.groundCoverageRatio(38.72, 35);
+  const opts = (groundAlbedo) => ({ bifaciality: 0.8, bifacialGcr: gcr, bifacialHeight: 1, ...(groundAlbedo == null ? {} : { groundAlbedo }) });
+  const run = (a) => M.monthlyYield(c, 38.72, 35, 180, opts(a));
+  const [r0, r1, r2] = [0.1, 0.25, 0.4].map(run);
+  // Equal steps of albedo, equal steps of rear and front irradiation.
+  assert.ok(Math.abs((r2.rearAnnual - r1.rearAnnual) - (r1.rearAnnual - r0.rearAnnual)) < 1e-9 * r1.rearAnnual);
+  assert.ok(Math.abs((r2.poaAnnual - r1.poaAnnual) - (r1.poaAnnual - r0.poaAnnual)) < 1e-9 * r1.poaAnnual);
+  // The rear gains about four times what the front gains (Lisbon: 92 against 21 kWh/m² per
+  // +0.15): the ground is the rear's largest source of light, and the front's smallest.
+  assert.ok(r1.rearAnnual - r0.rearAnnual > 4 * (M.monthlyYield(c, 38.72, 35, 180, { groundAlbedo: 0.25 }).poaAnnual -
+    M.monthlyYield(c, 38.72, 35, 180, { groundAlbedo: 0.1 }).poaAnnual));
+  // Grass (0.20) is the default.
+  assert.equal(run(0.2).annual, run(null).annual);
+  // Out of range is refused, also for the tracker.
+  assert.throws(() => M.monthlyYield(c, 38.72, 35, 180, { groundAlbedo: 1.2 }), /ground albedo/);
+  assert.throws(() => M.monthlyYield(c, 38.72, 0, 180, { mounting: 'single-axis', groundAlbedo: -0.1 }), /ground albedo/);
+});
