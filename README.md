@@ -514,7 +514,7 @@ With the Hay–Davies sky, the circumsolar share counts as beam. Yield = front +
 **Limits.**
 - **The ground is averaged.** Like pvlib's, the model takes the ground's brightness as uniform across the pitch. In an infinite array, the average sky view of the ground then does not depend on the rows' height: pvlib gives the same value to 10⁻¹² for heights from 0.4 to 4 row widths. So the height does not enter the model, although real rows mounted higher get a more evenly lit ground under them. There is therefore no height setting.
 - **Not modelled:** light reflected by other rows, the rear's glass reflection loss, row ends, trackers and sloping ground.
-- **Assumed albedo:** the app's 0.2.
+- **Albedo:** a typical value for the chosen ground, not a measurement (see [Ground albedo](#ground-albedo-issue-71)).
 - **No field data.** The check is against pvlib only, so it shows that the geometry is computed right, not that the gain is what a real plant measures.
 - **Fixed rows only:** the tracker stays monofacial.
 
@@ -538,6 +538,26 @@ Without extra O&M, the break-even is the extra energy × the energy value × the
 The bifacial yield also varies a little less from year to year, for example 4.2% against 4.5% at Warsaw. The rear gains more in weaker years: the gain's correlation with the monofacial yield is −0.56 to −0.93 at these four sites.
 
 **Limits.** The P90 carries the front side's estimate uncertainty only. The rear model's own, above all the assumed albedo, is not in it, because there is no field data here to measure it. The bifacial P90 is therefore less cautious than it looks.
+
+### Ground albedo (issue #71)
+
+The ground's albedo is a setting in Configuration, **Ground under the rows**. It applies to the front side's ground-reflected light, the rear side, the tracker and every year of the P50 / P90; the rough no-data estimate ignores it. The choices are the land surfaces of pvlib 0.16.1's `pvlib.albedo.SURFACE_ALBEDOS`, which cites PVsyst's albedo table and Loutzenhiser et al. 2007:
+
+| Surface | Grass (default) | Fresh grass | Bare soil | Sand | Concrete | Urban |
+|---|---:|---:|---:|---:|---:|---:|
+| Albedo | 0.20 | 0.26 | 0.17 | 0.40 | 0.30 | 0.18 |
+
+These are typical values, not a measurement of the site; a measured albedo goes in as an own value (0.05–0.9). The Bifacial card's tooltip says what +0.1 of albedo would add, computed rather than scaled. The rear irradiation is exactly affine in the albedo (a test checks it); the gain, a ratio, is not.
+
+| Bifacial gain at bifaciality 0.8 | Tilt | GCR | Soil 0.17 | Grass 0.20 | Fresh grass 0.26 | Concrete 0.30 | Sand 0.40 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Warsaw | 39° | 0.31 | +9.2% | +10.3% | +12.5% | +13.9% | +17.4% |
+| Lisbon | 35° | 0.52 | +5.5% | +6.2% | +7.6% | +8.6% | +10.9% |
+| Cairo | 27° | 0.66 | +3.9% | +4.5% | +5.6% | +6.3% | +8.2% |
+
+From grass to sand the bifacial gain grows by 70–80%. A monofacial array barely notices: grass to sand adds 1.7% at Warsaw and 0.9% at Cairo. Per +0.15 of albedo at Lisbon, the rear gains about four times what the front gains.
+
+**Out of scope:** snow, which needs snow-cover data and a model of snow on the modules, and a satellite albedo: NASA's 1° cell is skewed by nearby sea, which is why 0.2 was chosen in the first place.
 
 ## A note on the heuristic estimates
 

@@ -30,6 +30,7 @@ const USABLE_SHARE_STORAGE = 'solarSite.usableSharePct';
 const TRACKER_GCR_STORAGE = 'solarSite.trackerGcr';
 const TRACKER_LIMIT_STORAGE = 'solarSite.trackerLimitDeg';
 const BIFACIALITY_STORAGE = 'solarSite.bifaciality';
+const ALBEDO_STORAGE = 'solarSite.groundAlbedo';
 const CRS_STORAGE         = 'solarSite.crs';
 const ECONOMICS_STORAGE   = 'solarSite.economics';
 const HISTORY_LIMIT      = 15;
@@ -113,6 +114,17 @@ const I18N = {
     'stat.trackerLimit': 'rotation limit ±{limit}°',
     'cfg.bifaciality': 'BIFACIALITY (BLANK = MONOFACIAL)',
     'cfg.bifacialNote': 'For the bifacial card: the rear\'s efficiency relative to the front, from the module\'s datasheet. The rows are the fixed rows of the capacity card, at its ground coverage ratio.',
+    'cfg.ground': 'GROUND UNDER THE ROWS (ALBEDO)',
+    'cfg.groundGrass': 'Grass (0.20)',
+    'cfg.groundFreshGrass': 'Fresh grass (0.26)',
+    'cfg.groundSoil': 'Bare soil (0.17)',
+    'cfg.groundSand': 'Sand (0.40)',
+    'cfg.groundConcrete': 'Concrete (0.30)',
+    'cfg.groundUrban': 'Urban (0.18)',
+    'cfg.groundCustom': 'Own value',
+    'cfg.groundAlbedoAria': 'Albedo',
+    'cfg.groundNote': 'The share of sunlight the ground reflects: a little on the front, the largest source of light on a bifacial module\'s rear. Typical values from pvlib\'s table (PVsyst, Loutzenhiser et al. 2007), not a measurement of the site; a measured value goes under "Own value". Snow is not modelled.',
+    'stat.bifacialAlbedo': ' Albedo +0.1 would add {rear} kWh/m² to the rear and {gain} points to the gain.',
     'stat.bifacial': 'Bifacial modules, fixed rows: kWh/kWp per year · gain from the rear side',
     'stat.bifacialOff': 'Monofacial modules. Enter the bifaciality in Configuration to see what the rear side adds.',
     'stat.bifacialTitle': 'The rear of the fixed rows receives {rear} kWh/m² a year, {ratio}% of the front: sky light between the rows, light reflected by the ground (albedo {albedo}, partly shaded by the rows) and low sun from behind. Yield = front + {bf} bifaciality × (1 − {loss}% for the racking) × rear. Rows at ground coverage {gcr}, {tilt}° tilt, on flat ground. 2-D view-factor model of long rows (infinite sheds), within 0.1% of pvlib\'s rear irradiance; like pvlib\'s, it averages the ground\'s brightness between the rows, so the rows\' height does not enter. The capacity card and the economics table show the bifacial case next to the monofacial one.',
@@ -329,6 +341,17 @@ const I18N = {
     'stat.trackerLimit': 'limit obrotu ±{limit}°',
     'cfg.bifaciality': 'BIFACJALNOŚĆ (PUSTE = MODUŁY JEDNOSTRONNE)',
     'cfg.bifacialNote': 'Do karty modułów bifacjalnych: sprawność tylnej strony względem przedniej, z karty katalogowej modułu. Rzędy to rzędy stałe z karty mocy, przy jej pokryciu terenu.',
+    'cfg.ground': 'GRUNT POD RZĘDAMI (ALBEDO)',
+    'cfg.groundGrass': 'Trawa (0,20)',
+    'cfg.groundFreshGrass': 'Świeża trawa (0,26)',
+    'cfg.groundSoil': 'Goła gleba (0,17)',
+    'cfg.groundSand': 'Piasek (0,40)',
+    'cfg.groundConcrete': 'Beton (0,30)',
+    'cfg.groundUrban': 'Teren zabudowany (0,18)',
+    'cfg.groundCustom': 'Własna wartość',
+    'cfg.groundAlbedoAria': 'Albedo',
+    'cfg.groundNote': 'Jaką część światła słonecznego odbija grunt: trochę na przód modułów, a dla tyłu modułu bifacjalnego to największe źródło światła. Typowe wartości z tabeli pvlib (PVsyst, Loutzenhiser i in. 2007), nie pomiar terenu; zmierzoną wartość wpisz jako „Własna wartość”. Śnieg nie jest modelowany.',
+    'stat.bifacialAlbedo': ' Albedo większe o 0,1 dodałoby {rear} kWh/m² na tył i {gain} pkt do zysku.',
     'stat.bifacial': 'Moduły bifacjalne, rzędy stałe: kWh/kWp rocznie · zysk z tylnej strony',
     'stat.bifacialOff': 'Moduły jednostronne. Wpisz bifacjalność w konfiguracji, żeby zobaczyć, co dodaje tylna strona.',
     'stat.bifacialTitle': 'Tył rzędów stałych dostaje {rear} kWh/m² rocznie, {ratio}% tego co przód: światło nieba między rzędami, światło odbite od gruntu (albedo {albedo}, częściowo w cieniu rzędów) i niskie słońce od tyłu. Uzysk = przód + bifacjalność {bf} × (1 − {loss}% na konstrukcję) × tył. Rzędy przy pokryciu terenu {gcr}, nachyleniu {tilt}°, na płaskim gruncie. Dwuwymiarowy model współczynników widoku długich rzędów (infinite sheds), w granicach 0,1% od pvlib dla promieniowania na tył; jak w pvlib jasność gruntu jest uśredniona między rzędami, więc wysokość rzędów nie ma wpływu. Karta mocy i tabela ekonomii pokazują wariant bifacjalny obok jednostronnego.',
@@ -651,6 +674,32 @@ function currentBifaciality() {
   });
 });
 
+// Ground albedo (issue #71): a surface from pvlib's table or the user's own value. The
+// number field always shows the albedo in use; typing in it switches to "own value".
+function currentAlbedo() {
+  return SiteCapacity.albedoSetting(document.getElementById('ground-surface').value, document.getElementById('ground-albedo').value);
+}
+(() => {
+  const select = document.getElementById('ground-surface'), input = document.getElementById('ground-albedo');
+  const apply = () => {
+    const a = currentAlbedo();
+    select.value = a.surface;
+    input.value = String(Math.round(a.albedo * 100) / 100);
+    try { localStorage.setItem(ALBEDO_STORAGE, JSON.stringify(a)); } catch { /* ignore */ }
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem(ALBEDO_STORAGE) || 'null');
+    if (saved && typeof saved.surface === 'string') {
+      const a = SiteCapacity.albedoSetting(saved.surface, saved.albedo);
+      select.value = a.surface;
+      input.value = String(Math.round(a.albedo * 100) / 100);
+    }
+  } catch { /* ignore */ }
+  const changed = () => { apply(); if (currentData.length) renderStats(currentData, computeSiteStats(currentData)); };
+  select.addEventListener('change', changed);
+  input.addEventListener('change', () => { select.value = 'custom'; changed(); });
+})();
+
 // ─── Coordinate system of uploaded files (remembered in this browser) ───
 // '' = lat/lon; otherwise a crs.js id such as 'utm:34N', 'pl2000:7' or 'pttm06'.
 
@@ -955,7 +1004,8 @@ function computeSiteStats(data) {
   // Yield: from satellite irradiance when available, otherwise the old rough formula.
   const systemLoss = currentSystemLoss();
   const horizon = siteHorizon(centerLat, centerLon);
-  const modelOptions = { systemLoss, horizon }; // every yield below sees the skyline, once computed
+  const ground = currentAlbedo(); // issue #71: the ground under every array below
+  const modelOptions = { systemLoss, horizon, groundAlbedo: ground.albedo }; // every yield below sees the skyline, once computed
   const { clim, fromSeries } = siteClimatology(centerLat, centerLon);
   let yieldEst, optTilt, optimalYield, seasonal, yieldSource, ghiAnnual = null, tiltCurve = null, climFetchedAt = null;
   let climPeriod = null;
@@ -970,7 +1020,7 @@ function computeSiteStats(data) {
     yieldEst = Math.round(site.annual);
     seasonal = site.monthly.map(Math.round);
     if (horizon) {
-      const open = SolarModel.monthlyYield(clim, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz, { systemLoss }).annual;
+      const open = SolarModel.monthlyYield(clim, centerLat, avgSlope ?? optTilt, avgAz ?? facingAz, { systemLoss, groundAlbedo: ground.albedo }).annual;
       horizonLossPct = Math.round((site.annual / open - 1) * 1000) / 10;
     }
     ghiAnnual = Math.round(clim.ghi.reduce((s, v, m) => s + v * [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m], 0));
@@ -1086,8 +1136,17 @@ function computeSiteStats(data) {
     bifacial = {
       yield: Math.round(both.annual), gainPct: Math.round((both.annual / front.annual - 1) * 1000) / 10,
       rear: Math.round(both.rearAnnual), ratioPct: Math.round(both.rearAnnual / front.poaAnnual * 1000) / 10,
-      bifaciality, gcr, tilt: rowTilt, albedo: SolarModel.DEFAULTS.groundAlbedo,
+      bifaciality, gcr, tilt: rowTilt, albedo: ground.albedo, surface: ground.surface,
       rearLossPct: SolarModel.DEFAULTS.rearLoss * 100, variability: null,
+    };
+    // Sensitivity (issue #71): the same at albedo + 0.1, front and rear. The rear is affine
+    // in the albedo; the gain is a ratio, so it is computed rather than scaled.
+    const up = { groundAlbedo: Math.min(1, ground.albedo + 0.1) };
+    const frontUp = SolarModel.monthlyYield(clim, centerLat, rowTilt, avgAz ?? facingAz, { ...modelOptions, ...up });
+    const bothUp = SolarModel.monthlyYield(clim, centerLat, rowTilt, avgAz ?? facingAz, { ...opts, ...up });
+    bifacial.albedoStep = {
+      rear: Math.round(bothUp.rearAnnual - both.rearAnnual),
+      gainPts: Math.round(((bothUp.annual / frontUp.annual) - (both.annual / front.annual)) * 1000) / 10,
     };
     // P50/P90 with the rear side (issue #69): the same years and the same estimate
     // uncertainty as the monofacial P50/P90; the rear model's own uncertainty is not in it.
@@ -1113,7 +1172,7 @@ function computeSiteStats(data) {
   const stats = {
     ratings, counts, avgSlope, avgAz, avgElev, centerLat, centerLon,
     yieldEst, optTilt, optimalYield: Math.round(optimalYield), yieldSource, ghiAnnual, tiltCurve,
-    systemLossPct: Math.round(systemLoss * 1000) / 10, climFetchedAt, climPeriod, variability, horizon, horizonLossPct,
+    systemLossPct: Math.round(systemLoss * 1000) / 10, ground, climFetchedAt, climPeriod, variability, horizon, horizonLossPct,
     facing, facingAz, hull, area, capacity, tracker, bifacial,
     spacing, rows, benchmarkPct, shadingFlags, outlierFlags, seasonal, terrain,
     // No rows because of the slope alone: flat ground at this latitude would take them.
@@ -1577,6 +1636,8 @@ function renderStats(data, stats) {
     ? t('stat.bifacialTitle', {
       rear: bf.rear.toLocaleString(), ratio: bf.ratioPct.toLocaleString(), albedo: bf.albedo, bf: bf.bifaciality,
       loss: bf.rearLossPct, gcr: bf.gcr.toFixed(2), tilt: bf.tilt.toFixed(0),
+    }) + t('stat.bifacialAlbedo', {
+      rear: bf.albedoStep.rear.toLocaleString(), gain: (bf.albedoStep.gainPts >= 0 ? '+' : '') + bf.albedoStep.gainPts.toLocaleString(),
     }) + (bf.variability && v ? t('stat.bifacialP90', {
       p50: bf.variability.p50.toLocaleString(), p90: bf.variability.p90Year.toLocaleString(), first: v.first, last: v.last,
     }) : '')
@@ -1795,6 +1856,7 @@ function buildInitialPrompt(stats) {
         : `NASA POWER climatology, ${periodLabel(stats.climPeriod ?? NASA_CLIMATOLOGY_PERIOD)} means`}; yield via Hay–Davies anisotropic-sky transposition with the beam spread over the day by the Collares-Pereira & Rabl distribution, ${stats.systemLossPct}% system losses, temperature derating)\n`
       : `YIELD SOURCE: rough latitude-based estimate (satellite data unavailable)\n`) +
     `SYSTEM LOSSES (user setting: wiring, inverter, soiling, mismatch): ${stats.systemLossPct}%\n` +
+    `GROUND ALBEDO (user setting): ${stats.ground.albedo} (${stats.ground.surface === 'custom' ? 'own value' : `typical value for ${stats.ground.surface} from pvlib's table, not measured`}; snow not modelled)\n` +
     (stats.variability
       ? `YEAR-TO-YEAR YIELD AT MEASURED ORIENTATION (same model on each year ${stats.variability.first}–${stats.variability.last}): ` +
         `P50 ${stats.variability.p50} kWh/kWp/yr, year-to-year variation ${stats.variability.covPct}%. ` +
@@ -1839,7 +1901,8 @@ function buildInitialPrompt(stats) {
       ? `BIFACIAL MODULES (fixed rows, bifaciality ${stats.bifacial.bifaciality}): ${stats.bifacial.yield} kWh/kWp/yr, ` +
         `${stats.bifacial.gainPct}% over monofacial at the same orientation; the rear receives ${stats.bifacial.rear} kWh/m²/yr ` +
         `(${stats.bifacial.ratioPct}% of the front) at ground coverage ratio ${stats.bifacial.gcr.toFixed(2)} on flat ground, ` +
-        `albedo ${stats.bifacial.albedo} (assumed); 2-D view-factor model with the ground averaged between rows, row height not modelled` +
+        `ground albedo ${stats.bifacial.albedo} (${stats.bifacial.surface === 'custom' ? 'entered by the user' : `typical value for ${stats.bifacial.surface}, not measured`}; ` +
+        `+0.1 albedo would add ${stats.bifacial.albedoStep.gainPts} points to the gain); 2-D view-factor model with the ground averaged between rows, row height not modelled` +
         (stats.bifacial.variability
           ? `. Bifacial P50 / 1-year P90: ${stats.bifacial.variability.p50} / ${stats.bifacial.variability.p90Year} kWh/kWp/yr ` +
             `(same years and estimate uncertainty as the monofacial P50/P90; the uncertainty of the rear model itself, mainly the albedo, is not included)`

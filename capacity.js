@@ -102,8 +102,24 @@
     return Number.isFinite(v) ? Math.min(Math.max(v, 0.1), 1) : null;
   }
 
+  // Ground albedo (issue #71): the land surfaces of pvlib's SURFACE_ALBEDOS (pvlib 0.16,
+  // citing PVsyst's albedo table and Loutzenhiser et al. 2007). Typical values, not a
+  // measurement of the site. 'grass' (0.20) is the model's default.
+  const SURFACE_ALBEDOS = { grass: 0.2, 'fresh grass': 0.26, soil: 0.17, sand: 0.4, concrete: 0.3, urban: 0.18 };
+  const ALBEDO_RANGE = [0.05, 0.9];
+  // { surface, albedo }: a surface from the table, or 'custom' with the user's value clamped
+  // to the range; an unknown surface or an unusable custom value falls back to grass.
+  function albedoSetting(surface, customInput) {
+    if (Object.hasOwn(SURFACE_ALBEDOS, surface)) return { surface, albedo: SURFACE_ALBEDOS[surface] };
+    const v = parseNumber(customInput);
+    if (surface === 'custom' && Number.isFinite(v)) {
+      return { surface, albedo: Math.min(Math.max(v, ALBEDO_RANGE[0]), ALBEDO_RANGE[1]) };
+    }
+    return { surface: 'grass', albedo: SURFACE_ALBEDOS.grass };
+  }
+
   const api = {
-    bifacialitySetting,
+    bifacialitySetting, albedoSetting, SURFACE_ALBEDOS, ALBEDO_RANGE,
     winterNoonElevation, rowPitchFactor, groundCoverageRatio, gradeAwayFromEquator, siteCapacity,
     moduleEfficiencyFraction, usableShareFraction, trackerGcrSetting, trackerLimitSetting,
     DEFAULTS, MIN_SUN_ELEVATION_DEG, TRACKER_GCR_RANGE,

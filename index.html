@@ -137,6 +137,22 @@
           For the bifacial card: the rear's efficiency relative to the front, from the module's datasheet. The rows are the fixed rows of the capacity card, at its ground coverage ratio.
         </div>
       </div>
+      <div class="input-group">
+        <label class="input-label" for="ground-surface" data-i18n="cfg.ground">GROUND UNDER THE ROWS (ALBEDO)</label>
+        <select id="ground-surface">
+          <option value="grass" data-i18n="cfg.groundGrass">Grass (0.20)</option>
+          <option value="fresh grass" data-i18n="cfg.groundFreshGrass">Fresh grass (0.26)</option>
+          <option value="soil" data-i18n="cfg.groundSoil">Bare soil (0.17)</option>
+          <option value="sand" data-i18n="cfg.groundSand">Sand (0.40)</option>
+          <option value="concrete" data-i18n="cfg.groundConcrete">Concrete (0.30)</option>
+          <option value="urban" data-i18n="cfg.groundUrban">Urban (0.18)</option>
+          <option value="custom" data-i18n="cfg.groundCustom">Own value</option>
+        </select>
+        <input type="number" id="ground-albedo" min="0.05" max="0.9" step="0.01" value="0.2" inputmode="decimal" aria-label="Albedo" data-i18n-aria="cfg.groundAlbedoAria">
+        <div class="key-note" data-i18n="cfg.groundNote">
+          The share of sunlight the ground reflects: a little on the front, the largest source of light on a bifacial module's rear. Typical values from pvlib's table (PVsyst, Loutzenhiser et al. 2007), not a measurement of the site; a measured value goes under "Own value". Snow is not modelled.
+        </div>
+      </div>
     </div>
 
     <!-- DATA INPUT -->

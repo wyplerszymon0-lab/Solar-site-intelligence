@@ -368,6 +368,7 @@
     if (!BEAM_PROFILES.includes(o.beamProfile)) throw new Error(`unknown beam profile: ${o.beamProfile}`);
     if (!MOUNTINGS.includes(o.mounting)) throw new Error(`unknown mounting: ${o.mounting}`);
     const tracking = o.mounting === 'single-axis';
+    if (!(o.groundAlbedo >= 0 && o.groundAlbedo <= 1)) throw new Error('ground albedo must be in [0, 1]');
     const bifacial = o.bifaciality != null;
     if (bifacial) {
       if (tracking) throw new Error('bifacial modules are modelled on fixed rows only');

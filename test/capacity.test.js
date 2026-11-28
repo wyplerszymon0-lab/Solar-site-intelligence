@@ -126,3 +126,16 @@ test('a tracker layout at GCR 0.33 with 21% modules: 0.69 MWp per hectare', () =
   assert.ok(Math.abs(c.kWp - 693) < 1e-9);
   assert.ok(Math.abs(c.haPerMWp - 1.443) < 0.001);
 });
+
+test('ground albedo: pvlib surfaces, an own value clamped to 0.05–0.9, grass otherwise', () => {
+  // The land values of pvlib 0.16.1 pvlib.albedo.SURFACE_ALBEDOS (issue #71).
+  assert.deepEqual(C.SURFACE_ALBEDOS, { grass: 0.2, 'fresh grass': 0.26, soil: 0.17, sand: 0.4, concrete: 0.3, urban: 0.18 });
+  assert.deepEqual(C.albedoSetting('sand', '0.7'), { surface: 'sand', albedo: 0.4 });
+  assert.deepEqual(C.albedoSetting('custom', '0,32'), { surface: 'custom', albedo: 0.32 });
+  assert.deepEqual(C.albedoSetting('custom', 2), { surface: 'custom', albedo: 0.9 });
+  assert.deepEqual(C.albedoSetting('custom', '0'), { surface: 'custom', albedo: 0.05 });
+  assert.deepEqual(C.albedoSetting('custom', ''), { surface: 'grass', albedo: 0.2 });
+  assert.deepEqual(C.albedoSetting('snow'), { surface: 'grass', albedo: 0.2 });
+  assert.deepEqual(C.albedoSetting('toString'), { surface: 'grass', albedo: 0.2 });
+  assert.equal(C.albedoSetting('grass').albedo, require('../solar-model.js').DEFAULTS.groundAlbedo);
+});
